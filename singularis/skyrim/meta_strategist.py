@@ -65,6 +65,10 @@ class MetaStrategist:
         self.current_cycle = 0
         self.last_instruction_cycle = 0
         
+    def tick_cycle(self):
+        """Increment the current cycle counter by 1."""
+        self.current_cycle += 1
+
     def observe(
         self,
         state: Dict[str, Any],

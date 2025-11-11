@@ -605,6 +605,8 @@ class SkyrimAGI:
             'autonomy': motivation.autonomy
         })
 
+        # Increment meta-strategist cycle before planning
+        self.meta_strategist.tick_cycle()
         # Use RL-based action selection if enabled
         if self.rl_learner is not None:
             print("[PLANNING] Using RL-based action selection with LLM reasoning...")

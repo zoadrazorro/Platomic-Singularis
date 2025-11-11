@@ -192,7 +192,7 @@ class SkyrimPerception:
         ]
         return all(d < threshold for d in diffs)
 
-    def detect_visual_stuckness(self, window: int = 5, similarity_threshold: float = 0.995) -> bool:
+    def detect_visual_stuckness(self, window: int = 8, similarity_threshold: float = 0.9985) -> bool:
         """
         Check if visual embedding hasn't changed (stuck/collision).
         
@@ -227,7 +227,7 @@ class SkyrimPerception:
         # If all very similar (>threshold), probably stuck
         # Also require minimum movement threshold to avoid false positives during menus/dialogue
         stuck = (all(s > similarity_threshold for s in similarities) and 
-                len(similarities) >= 4)  # Need at least 4 consecutive similar frames
+                len(similarities) >= 7)  # Need at least 7 consecutive similar frames
         
         if stuck:
             print(f"[VISUAL] Detected stuckness: similarities = {[f'{s:.4f}' for s in similarities]}")
@@ -395,14 +395,6 @@ class SkyrimPerception:
         Detect Skyrim-specific game state from screen analysis.
         This would use OCR, color detection, and UI element recognition.
         """
-        # For now, return enhanced dummy state with some variability
-        import random
-        import time
-        
-        # Simulate some state variation to make it more realistic
-        base_time = int(time.time() / 10)  # Changes every 10 seconds
-        random.seed(base_time)
-        
         # Detect if in menu (would check for UI elements)
         in_menu = self._detect_menu_state()
         
@@ -412,15 +404,16 @@ class SkyrimPerception:
         # Detect location (would use OCR on location text)
         location = self._detect_location()
         
+        # Use more stable state values (would come from actual game state reading)
         state = {
-            'health': max(20, 100 - random.randint(0, 30)),  # Vary health
-            'magicka': max(10, 100 - random.randint(0, 20)),
-            'stamina': max(30, 100 - random.randint(0, 15)),
-            'level': random.randint(1, 50),
+            'health': 100.0,  # Would read from health bar
+            'magicka': 100.0,  # Would read from magicka bar
+            'stamina': 100.0,  # Would read from stamina bar
+            'level': 1,  # Would read from character stats
             'location_name': location,
-            'gold': random.randint(50, 1000),
+            'gold': 100,  # Would read from inventory
             'in_combat': in_combat,
-            'enemies_nearby': random.randint(0, 3) if in_combat else 0,
+            'enemies_nearby': 0,  # Would detect from enemy health bars
             'nearby_npcs': self._detect_nearby_npcs(),
             'in_menu': in_menu,
             'layer_transition_reason': self._determine_layer_transition_reason(in_combat, in_menu)
@@ -442,20 +435,19 @@ class SkyrimPerception:
         # - Combat music indicators
         # - Weapon drawn state
         # - Enemy targeting reticles
-        import random
-        return random.random() < 0.1  # 10% chance of combat for testing
+        
+        # For now, default to NOT in combat
+        # Real implementation would analyze screen for combat indicators
+        return False
 
     def _detect_location(self) -> str:
         """Detect current location (would use OCR on location text)."""
         # TODO: Implement actual location detection using OCR
         # Would read the location text that appears when entering new areas
-        locations = [
-            "Whiterun", "Solitude", "Windhelm", "Riften", "Markarth",
-            "Dragonsreach", "Bleak Falls Barrow", "Riverwood", 
-            "Helgen", "Winterhold", "The Rift", "Falkreath"
-        ]
-        import random
-        return random.choice(locations)
+        
+        # For now, return a stable default location
+        # Real implementation would use OCR to read location name from screen
+        return "Skyrim"
 
     def _detect_nearby_npcs(self) -> List[str]:
         """Detect nearby NPCs (would analyze screen for NPC indicators)."""
@@ -464,10 +456,9 @@ class SkyrimPerception:
         # - NPC name tags
         # - Character models
         # - Dialogue prompts
-        npcs = ["Guard", "Merchant", "Citizen", "Lydia", "Faendal"]
-        import random
-        if random.random() < 0.3:  # 30% chance of nearby NPCs
-            return [random.choice(npcs)]
+        
+        # For now, return empty list
+        # Real implementation would detect NPC name tags on screen
         return []
 
     def _determine_layer_transition_reason(self, in_combat: bool, in_menu: bool) -> str:

@@ -155,6 +155,13 @@ class SkyrimAGI:
         """Initialize LLM (async)."""
         print("Initializing LLM consciousness engine...")
         await self.agi.initialize_llm()
+        
+        # Verify LLM is initialized
+        if hasattr(self.agi, 'consciousness_llm') and self.agi.consciousness_llm:
+            print("[LLM] ✓ LLM consciousness engine initialized successfully")
+            print(f"[LLM] Type: {type(self.agi.consciousness_llm)}")
+        else:
+            print("[LLM] ⚠️ LLM consciousness engine is None - will use heuristic planning only")
 
     async def autonomous_play(self, duration_seconds: Optional[int] = None):
         """
@@ -215,7 +222,11 @@ class SkyrimAGI:
                     print(f"[WARN] Change detected: {changes}")
 
                 # Detect visual stuckness (less aggressive)
-                if (self.stats['cycles_completed'] > 3 and  # Wait a few cycles before checking
+                # Skip stuckness detection in menus/inventory since screen naturally doesn't change
+                in_menu_scene = scene_type in [SceneType.INVENTORY, SceneType.DIALOGUE, SceneType.MENU]
+                
+                if (self.stats['cycles_completed'] > 5 and  # Wait more cycles before checking
+                    not in_menu_scene and  # Don't check in menus
                     self.perception.detect_visual_stuckness()):
                     print("[WARN] Visually stuck! Taking gentle evasive action...")
                     await self.actions.evasive_maneuver()
@@ -423,7 +434,12 @@ class SkyrimAGI:
             return f'switch_to_{optimal_layer.lower()}'
 
         # Try LLM-based planning if available, otherwise use heuristics
-        if hasattr(self.agi, 'consciousness_llm') and self.agi.consciousness_llm:
+        has_attr = hasattr(self.agi, 'consciousness_llm')
+        has_llm = has_attr and self.agi.consciousness_llm is not None
+        
+        print(f"[DEBUG] LLM Check: hasattr={has_attr}, consciousness_llm={self.agi.consciousness_llm if has_attr else 'N/A'}")
+        
+        if has_llm:
             print("[PLANNING] Using LLM-based strategic planning...")
             try:
                 llm_action = await self._plan_action_with_llm(
@@ -433,10 +449,16 @@ class SkyrimAGI:
                 if llm_action:
                     print(f"[LLM] Selected action: {llm_action}")
                     return llm_action
+                else:
+                    print("[LLM] LLM returned None, falling back to heuristics")
             except Exception as e:
                 print(f"[LLM] Planning failed: {e}, using heuristics")
+                import traceback
+                traceback.print_exc()
         else:
             print("[PLANNING] LLM not available, using heuristic planning...")
+            if has_attr:
+                print(f"[PLANNING] consciousness_llm value: {self.agi.consciousness_llm}")
 
         # Fallback: Action selection within current layer based on motivation
         if motivation.dominant_drive().value == 'curiosity':
@@ -509,9 +531,15 @@ Select the single most appropriate action:"""
 
         try:
             print("[LLM] Calling LM Studio for layer-aware action planning...")
+            print(f"[LLM] Context length: {len(context)} characters")
+            
             result = await self.agi.process(context)
+            print(f"[LLM] Result type: {type(result)}")
+            print(f"[LLM] Result keys: {result.keys() if isinstance(result, dict) else 'Not a dict'}")
+            
             response = result.get('consciousness_response', {}).get('response', '')
             print(f"[LLM] Raw response: {response}")
+            print(f"[LLM] Response length: {len(response)} characters")
 
             # Parse LLM response to extract action
             response_lower = response.lower()

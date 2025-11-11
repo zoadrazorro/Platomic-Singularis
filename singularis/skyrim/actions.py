@@ -371,46 +371,62 @@ class SkyrimActions:
 
     async def explore_with_waypoints(self, duration: float = 10.0):
         """
-        Explore with waypoint navigation - more purposeful than random movement.
-        Picks a direction and commits to it for several steps.
+        Explore with waypoint navigation - prioritizes forward movement.
+        Uses camera to scan for objects and targets of interest.
         """
         import random
         
-        print(f"Exploring with waypoints for {duration}s...")
+        print(f"Exploring with waypoints for {duration}s (forward-biased)...")
         end_time = time.time() + duration
         
         current_direction = None
         direction_steps = 0
-        max_steps_per_direction = 3
+        max_steps_per_direction = 4  # Commit longer to each direction
         
         while time.time() < end_time:
-            # Pick new direction if needed
+            # Pick new direction if needed - heavily bias toward forward
             if current_direction is None or direction_steps >= max_steps_per_direction:
-                current_direction = random.choice(['forward', 'left', 'right', 'backward'])
+                # 70% forward, 15% left, 15% right, 0% backward (only for unstuck)
+                rand = random.random()
+                if rand < 0.70:
+                    current_direction = 'forward'
+                elif rand < 0.85:
+                    current_direction = 'left'
+                else:
+                    current_direction = 'right'
+                
                 direction_steps = 0
                 print(f"[EXPLORE] New direction: {current_direction}")
             
             # Move in chosen direction using smart movement
-            move_duration = random.uniform(1.2, 2.0)  # Slightly shorter for better responsiveness
+            move_duration = random.uniform(1.5, 2.5)  # Longer movements for more progress
             
             await self.smart_movement(current_direction, move_duration)
             
             direction_steps += 1
             
-            # Occasional look around to scan for interesting things
-            if random.random() < 0.4:
-                await self.look_around()
+            # Frequent camera scanning to look for objects/NPCs
+            if random.random() < 0.6:  # 60% chance
+                await self.scan_for_targets()
             
             # Small chance to jump over obstacles
-            if random.random() < 0.15:
+            if random.random() < 0.1:
                 await self.execute(Action(ActionType.JUMP))
                 
             # Brief pause between movements
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.3)
 
     async def move_backward(self, duration: float = 1.0):
         """Move backward for specified duration."""
         await self.execute(Action(ActionType.MOVE_BACKWARD, duration))
+
+    async def move_left(self, duration: float = 1.0):
+        """Move left (strafe) for specified duration."""
+        await self.execute(Action(ActionType.MOVE_LEFT, duration))
+
+    async def move_right(self, duration: float = 1.0):
+        """Move right (strafe) for specified duration."""
+        await self.execute(Action(ActionType.MOVE_RIGHT, duration))
 
     async def evasive_maneuver(self):
         """

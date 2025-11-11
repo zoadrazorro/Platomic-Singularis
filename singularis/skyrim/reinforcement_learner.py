@@ -259,7 +259,7 @@ class ReinforcementLearner:
         epsilon_start: float = 0.3,
         epsilon_end: float = 0.05,
         epsilon_decay: float = 0.995,
-        batch_size: int = 32,
+        batch_size: int = 5,  # Smaller batch for faster initial learning
         replay_capacity: int = 10000
     ):
         """

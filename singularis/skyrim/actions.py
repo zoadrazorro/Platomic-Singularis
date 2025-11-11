@@ -408,6 +408,10 @@ class SkyrimActions:
             # Frequent camera scanning to look for objects/NPCs
             if random.random() < 0.6:  # 60% chance
                 await self.scan_for_targets()
+            else:
+                # Even if not scanning, periodically recenter camera
+                if random.random() < 0.3:
+                    await self.recenter_camera()
             
             # Small chance to jump over obstacles
             if random.random() < 0.1:
@@ -489,15 +493,26 @@ class SkyrimActions:
             # Try a small recovery movement
             await asyncio.sleep(0.5)
 
+    async def recenter_camera(self):
+        """
+        Recenter camera to look straight ahead (horizontal).
+        This prevents getting stuck looking at ground or sky.
+        """
+        print("[CAMERA] Recentering to horizontal view...")
+        # Small upward adjustment to ensure we're looking forward
+        await self.look_vertical(5)
+        await asyncio.sleep(0.1)
+
     async def scan_for_targets(self):
         """
         Use right stick to scan environment for targets/objects.
         Performs a smooth camera sweep to detect moving objects or points of interest.
+        Always recenters camera after scanning.
         """
         import random
         
-        # Random scanning pattern
-        scan_type = random.choice(['horizontal_sweep', 'vertical_check', 'quick_glance'])
+        # Random scanning pattern - favor horizontal scans to avoid ground-staring
+        scan_type = random.choice(['horizontal_sweep', 'horizontal_sweep', 'quick_glance'])
         
         if scan_type == 'horizontal_sweep':
             # Sweep camera left to right to scan horizon
@@ -508,15 +523,6 @@ class SkyrimActions:
             await asyncio.sleep(0.2)
             await self.look_horizontal(-30)  # Return to center
             
-        elif scan_type == 'vertical_check':
-            # Check up and down for elevated/ground targets
-            print("[SCAN] Vertical check for targets...")
-            await self.look_vertical(20)     # Look up
-            await asyncio.sleep(0.15)
-            await self.look_vertical(-40)    # Look down
-            await asyncio.sleep(0.15)
-            await self.look_vertical(20)     # Return to center
-            
         else:  # quick_glance
             # Quick glance to one side
             direction = random.choice([-45, 45])
@@ -524,6 +530,9 @@ class SkyrimActions:
             await self.look_horizontal(direction)
             await asyncio.sleep(0.1)
             await self.look_horizontal(-direction)  # Return to center
+        
+        # Always recenter camera after scanning
+        await self.recenter_camera()
 
     async def track_moving_target(self, horizontal_offset: float = 0, vertical_offset: float = 0):
         """

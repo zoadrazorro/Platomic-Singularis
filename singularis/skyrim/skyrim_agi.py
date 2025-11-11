@@ -569,7 +569,7 @@ class SkyrimAGI:
             print("[PLANNING] Using LLM-based strategic planning...")
             try:
                 llm_action = await self._plan_action_with_llm(
-                    game_state, scene_type, current_layer, available_actions, 
+                    perception, game_state, scene_type, current_layer, available_actions, 
                     strategic_analysis, motivation
                 )
                 if llm_action:
@@ -608,6 +608,7 @@ class SkyrimAGI:
 
     async def _plan_action_with_llm(
         self,
+        perception: Dict[str, Any],
         game_state,
         scene_type,
         current_layer: str,

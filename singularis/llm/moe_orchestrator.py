@@ -221,7 +221,7 @@ class MoEOrchestrator:
                     model_type="gemini",
                     model_name=self.gemini_model,
                     temperature=0.4 + (i * 0.1),  # Vary temperature for diversity
-                    max_tokens=768,
+                    max_tokens=2048,  # Increased for Gemini 2.5 Flash
                     specialization_prompt=self._get_specialization_prompt(role),
                     weight=1.0
                 )
@@ -249,7 +249,7 @@ class MoEOrchestrator:
                     model_type="claude",
                     model_name=self.claude_model,
                     temperature=0.6 + (i * 0.1),  # Vary temperature for diversity
-                    max_tokens=2048,
+                    max_tokens=4096,  # Increased for Claude Sonnet 4.5
                     specialization_prompt=self._get_specialization_prompt(role),
                     weight=1.5  # Claude experts get higher weight for reasoning
                 )

@@ -84,17 +84,17 @@ class SkyrimControllerBindings:
             await ctrl.tap_button(XboxButton.LS)  # Click left stick to sprint
         
         # Camera actions
-        async def look_up(ctrl):
-            await ctrl.look(0, 1.0, duration=1.0)
+        async def look_up(ctrl, duration=1.0):
+            await ctrl.look(0, 1.0, duration=duration)
         
-        async def look_down(ctrl):
-            await ctrl.look(0, -1.0, duration=1.0)
+        async def look_down(ctrl, duration=1.0):
+            await ctrl.look(0, -1.0, duration=duration)
         
-        async def look_left(ctrl):
-            await ctrl.look(-1.0, 0, duration=1.0)
+        async def look_left(ctrl, duration=1.0):
+            await ctrl.look(-1.0, 0, duration=duration)
         
-        async def look_right(ctrl):
-            await ctrl.look(1.0, 0, duration=1.0)
+        async def look_right(ctrl, duration=1.0):
+            await ctrl.look(1.0, 0, duration=duration)
         
         # Basic actions
         async def jump(ctrl, duration=0.0):

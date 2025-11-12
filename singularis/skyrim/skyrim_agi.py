@@ -28,6 +28,8 @@ import time
 import random
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
+import numpy as np
+from loguru import logger
 
 # Skyrim-specific modules
 from .perception import SkyrimPerception, SceneType, GameState

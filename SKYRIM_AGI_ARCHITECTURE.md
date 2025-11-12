@@ -292,7 +292,16 @@ Receives Singularis output and provides:
    - Danger > 3 enemies triggers
    - Mistral-Nemo powered
 
-5. **Learning Loop** (background)
+5. **Auxiliary Exploration Loop** ⭐ NEW (3.0s interval)
+   - **Always active** - runs while LLMs process
+   - Move forward every 3 seconds
+   - Look around every 2 seconds
+   - Change direction every 10 seconds
+   - Occasional jumps for terrain navigation
+   - **Keeps gameplay smooth** during heavy reasoning
+   - Pauses during combat/menus/dialogue
+
+6. **Learning Loop** (background)
    - RL training (every N cycles)
    - World model updates
    - Pattern recognition

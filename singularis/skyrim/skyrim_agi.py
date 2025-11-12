@@ -551,13 +551,29 @@ class SkyrimAGI:
     async def _perception_loop(self, duration_seconds: int, start_time: float):
         """
         Continuously perceive the game state and queue perceptions for reasoning.
+        Uses adaptive throttling to prevent queue overflow.
         """
         print("[PERCEPTION] Loop started")
         cycle_count = 0
+        skip_count = 0
         
         while self.running and (time.time() - start_time) < duration_seconds:
             try:
                 cycle_count += 1
+                
+                # Adaptive throttling: slow down if queue is filling up
+                queue_size = self.perception_queue.qsize()
+                max_queue_size = self.perception_queue.maxsize
+                
+                # If queue is more than 60% full, add extra delay
+                if queue_size >= max_queue_size * 0.6:
+                    throttle_delay = 2.0  # 2 second delay when queue is filling
+                    if skip_count % 10 == 0:  # Only log occasionally
+                        print(f"[PERCEPTION] Queue {queue_size}/{max_queue_size} - throttling")
+                elif queue_size >= max_queue_size * 0.4:
+                    throttle_delay = 1.0  # 1 second delay when queue is getting full
+                else:
+                    throttle_delay = self.config.perception_interval  # Normal speed
                 
                 # Perceive current state
                 perception = await self.perception.perceive()
@@ -572,16 +588,18 @@ class SkyrimAGI:
                     })
                 except asyncio.QueueFull:
                     # Skip if queue is full (reasoning is behind)
-                    print(f"[PERCEPTION] Queue full, skipping cycle {cycle_count}")
+                    skip_count += 1
+                    if skip_count % 20 == 0:  # Only log every 20 skips
+                        print(f"[PERCEPTION] Queue full, skipped {skip_count} cycles")
                 
-                # Wait before next perception
-                await asyncio.sleep(self.config.perception_interval)
+                # Wait before next perception (adaptive)
+                await asyncio.sleep(throttle_delay)
                 
             except Exception as e:
                 print(f"[PERCEPTION] Error: {e}")
                 await asyncio.sleep(1.0)
         
-        print("[PERCEPTION] Loop ended")
+        print(f"[PERCEPTION] Loop ended (skipped {skip_count} cycles)")
 
     async def _reasoning_loop(self, duration_seconds: int, start_time: float):
         """

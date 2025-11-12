@@ -1541,10 +1541,135 @@ class SkyrimAGI:
         else:
             print("[ASYNC] Fast reactive loop DISABLED")
         
+        # Start auxiliary exploration loop (always enabled)
+        aux_exploration_task = asyncio.create_task(self._auxiliary_exploration_loop(duration_seconds, start_time))
+        tasks.append(aux_exploration_task)
+        print("[ASYNC] Auxiliary exploration loop ENABLED")
+        
         # Wait for all tasks to complete (or any to fail)
         await asyncio.gather(*tasks, return_exceptions=True)
         
         print("[ASYNC] All parallel loops completed")
+
+    async def _auxiliary_exploration_loop(self, duration_seconds: int, start_time: float):
+        """
+        Auxiliary heuristic pipeline for continuous exploration.
+        
+        Runs independently while LLMs are processing to keep gameplay smooth.
+        Handles basic movement, looking around, and environmental interaction
+        without waiting for heavy reasoning.
+        
+        Actions performed:
+        - Move forward periodically
+        - Look around (camera movement)
+        - Occasional jumps for terrain navigation
+        - Random direction changes for exploration
+        
+        This ensures the character is always active even when LLMs are slow.
+        """
+        print("[AUX-EXPLORE] Auxiliary exploration loop started")
+        print("[AUX-EXPLORE] Interval: 3.0s (independent of main reasoning)")
+        
+        cycle_count = 0
+        last_move_time = time.time()
+        last_look_time = time.time()
+        last_direction_change = time.time()
+        
+        # Movement parameters
+        move_interval = 3.0  # Move forward every 3 seconds
+        look_interval = 2.0  # Look around every 2 seconds
+        direction_change_interval = 10.0  # Change direction every 10 seconds
+        
+        import random
+        
+        while self.running and (time.time() - start_time) < duration_seconds:
+            try:
+                cycle_count += 1
+                current_time = time.time()
+                
+                # Get current game state (non-blocking)
+                try:
+                    perception = await asyncio.wait_for(
+                        self.perception.perceive(),
+                        timeout=1.0
+                    )
+                    game_state = perception.get('game_state')
+                except asyncio.TimeoutError:
+                    game_state = None
+                
+                # Skip if in menu or dialogue
+                if game_state:
+                    scene_type = perception.get('scene_type', SceneType.UNKNOWN)
+                    if scene_type in [SceneType.MENU, SceneType.DIALOGUE, SceneType.INVENTORY]:
+                        await asyncio.sleep(1.0)
+                        continue
+                    
+                    # Skip if in combat (let main reasoning handle it)
+                    if game_state.in_combat:
+                        await asyncio.sleep(1.0)
+                        continue
+                
+                # MOVE FORWARD - Keep exploring
+                if current_time - last_move_time >= move_interval:
+                    try:
+                        if cycle_count % 10 == 0:
+                            print(f"[AUX-EXPLORE] Moving forward (cycle {cycle_count})")
+                        
+                        await self.actions.execute('move_forward', duration=1.5)
+                        last_move_time = current_time
+                        
+                        # Occasional jump for terrain navigation
+                        if random.random() < 0.2:  # 20% chance
+                            await asyncio.sleep(0.3)
+                            await self.actions.execute('jump', duration=0.3)
+                            if cycle_count % 10 == 0:
+                                print(f"[AUX-EXPLORE] Jump for terrain navigation")
+                    
+                    except Exception as e:
+                        if cycle_count % 30 == 0:
+                            print(f"[AUX-EXPLORE] Move error: {e}")
+                
+                # LOOK AROUND - Explore environment
+                if current_time - last_look_time >= look_interval:
+                    try:
+                        # Random camera movement
+                        look_direction = random.choice(['look_left', 'look_right', 'look_up', 'look_down'])
+                        look_duration = random.uniform(0.3, 0.8)
+                        
+                        if cycle_count % 10 == 0:
+                            print(f"[AUX-EXPLORE] Looking around: {look_direction}")
+                        
+                        await self.actions.execute(look_direction, duration=look_duration)
+                        last_look_time = current_time
+                    
+                    except Exception as e:
+                        if cycle_count % 30 == 0:
+                            print(f"[AUX-EXPLORE] Look error: {e}")
+                
+                # CHANGE DIRECTION - Avoid getting stuck
+                if current_time - last_direction_change >= direction_change_interval:
+                    try:
+                        # Turn to a new direction
+                        turn_direction = random.choice(['look_left', 'look_right'])
+                        turn_amount = random.uniform(1.0, 2.0)
+                        
+                        print(f"[AUX-EXPLORE] Changing direction: {turn_direction} for {turn_amount:.1f}s")
+                        await self.actions.execute(turn_direction, duration=turn_amount)
+                        last_direction_change = current_time
+                    
+                    except Exception as e:
+                        print(f"[AUX-EXPLORE] Direction change error: {e}")
+                
+                # Sleep to maintain interval
+                await asyncio.sleep(0.5)
+                
+            except Exception as e:
+                print(f"[AUX-EXPLORE] Error in cycle {cycle_count}: {e}")
+                import traceback
+                traceback.print_exc()
+                await asyncio.sleep(1.0)
+        
+        print(f"[AUX-EXPLORE] Loop ended after {cycle_count} cycles")
 
     async def _perception_loop(self, duration_seconds: int, start_time: float):
         """

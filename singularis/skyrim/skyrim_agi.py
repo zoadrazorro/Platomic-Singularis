@@ -2375,13 +2375,16 @@ What is the most strategic approach to this situation? Consider:
                         
                         # Store in memory for future reference
                         self.memory_rag.store_cognitive_memory(
-                            content=strategic_insight,
-                            context={
+                            situation={
                                 'type': 'strategic_analysis',
                                 'coherence_delta': coherence_delta,
                                 'location': game_state.location_name,
                                 'cycle': cycle_count
-                            }
+                            },
+                            action_taken='singularis_orchestration',
+                            outcome={'insight_length': len(strategic_insight), 'coherence_delta': coherence_delta},
+                            success=True,
+                            reasoning=strategic_insight
                         )
                         
                         # Update goal if Singularis generated one

@@ -69,7 +69,7 @@ class LocalMoEOrchestrator:
         for i, role in enumerate(self.expert_roles[:self.config.num_experts]):
             expert_config = LMStudioConfig(
                 base_url=self.config.base_url,
-                model=expert_models[i],  # Use specific instance
+                model_name=expert_models[i],  # Use specific instance
                 timeout=self.config.timeout,
                 max_tokens=self.config.max_tokens
             )
@@ -80,7 +80,7 @@ class LocalMoEOrchestrator:
         # Initialize synthesizer
         synth_config = LMStudioConfig(
             base_url=self.config.base_url,
-            model=self.config.synthesizer_model,
+            model_name=self.config.synthesizer_model,
             timeout=self.config.timeout,
             max_tokens=256
         )

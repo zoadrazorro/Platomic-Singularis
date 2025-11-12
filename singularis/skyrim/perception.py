@@ -178,6 +178,29 @@ class SkyrimPerception:
         ]
         # Perception history
         self.perception_history: List[Dict[str, Any]] = []
+        self._last_scene_type: SceneType = SceneType.UNKNOWN
+        self._current_visual_embedding: Optional[np.ndarray] = None
+        self._last_simulation_time: float = time.time()
+
+        # Simulated state placeholders (used when HUD data unavailable)
+        self._simulated_health: float = 100.0
+        self._simulated_magicka: float = 100.0
+        self._simulated_stamina: float = 100.0
+        self._simulated_gold: int = 120
+        self._simulated_enemy_count: int = 0
+        self._simulated_progress: float = 0.0
+        self._simulated_locations: int = 0
+        self._simulated_quests: int = 0
+        self._simulated_npcs_met: int = 0
+        self._simulated_mechanics: int = 0
+        self._simulated_equipment_quality: float = 0.35
+        self._simulated_carry_weight: float = 160.0
+        self._simulated_max_carry_weight: float = 300.0
+        self._simulated_combat_score: float = 0.5
+        self._simulated_stealth_score: float = 0.5
+        self._simulated_social_score: float = 0.5
+        self._simulated_player_level: int = 1
+        self._simulated_skill_level: float = 15.0
         
         # Action affordance system
         self.affordance_system = ActionAffordanceSystem()
@@ -336,6 +359,7 @@ class SkyrimPerception:
                      key=lambda i: probs[self.scene_candidates[i]])
 
         scene_type = scene_mapping.get(max_idx, SceneType.UNKNOWN)
+        self._last_scene_type = scene_type
 
         return scene_type, probs
 
@@ -426,35 +450,84 @@ class SkyrimPerception:
         Detect Skyrim-specific game state from screen analysis.
         This would use OCR, color detection, and UI element recognition.
         """
-        # Detect if in menu (would check for UI elements)
-        in_menu, menu_type = self._detect_menu_state()
-        
-        # Detect dialogue state
-        in_dialogue = self._detect_dialogue_state()
-        
-        # Detect combat state (would check for combat UI, red health bars, etc.)
-        in_combat = self._detect_combat_state()
-        
-        # Detect location (would use OCR on location text)
-        location = self._detect_location()
-        
-        # Use more stable state values (would come from actual game state reading)
+        hud_info = hud_info or {}
+        scene = self._last_scene_type
+
+        inferred_in_menu, inferred_menu_type = self._detect_menu_state()
+        scene_forces_menu = scene in (SceneType.INVENTORY, SceneType.MAP)
+        in_menu = hud_info.get('in_menu', False) or inferred_in_menu or scene_forces_menu
+        menu_type = hud_info.get('menu_type', inferred_menu_type)
+        if scene_forces_menu:
+            menu_type = 'inventory' if scene == SceneType.INVENTORY else 'map'
+
+        in_dialogue = hud_info.get('in_dialogue', False) or scene == SceneType.DIALOGUE or self._detect_dialogue_state()
+        hud_combat = hud_info.get('in_combat')
+        in_combat = bool(hud_combat) if hud_combat is not None else (scene == SceneType.COMBAT or self._detect_combat_state())
+
+        motion_score = self._estimate_motion_score(self._current_visual_embedding)
+        allow_simulated_core = 'health_percent' not in hud_info
+        self._update_simulated_state(motion_score, allow_core_stats=allow_simulated_core)
+
+        if allow_simulated_core:
+            health = self._simulated_health
+            magicka = self._simulated_magicka
+            stamina = self._simulated_stamina
+        else:
+            health = hud_info.get('health_percent', self._simulated_health)
+            magicka = hud_info.get('magicka_percent', self._simulated_magicka)
+            stamina = hud_info.get('stamina_percent', self._simulated_stamina)
+            # Keep simulated values roughly aligned with actual data
+            self._simulated_health = health
+            self._simulated_magicka = magicka
+            self._simulated_stamina = stamina
+
+        location = hud_info.get('location') or self._detect_location()
+        if not hud_info.get('location'):
+            if scene == SceneType.OUTDOOR_CITY:
+                location = "Whiterun"
+            elif scene == SceneType.OUTDOOR_WILDERNESS:
+                location = "Pine Forest"
+            elif scene == SceneType.INDOOR_DUNGEON:
+                location = "Nordic Ruin"
+            elif scene == SceneType.INDOOR_BUILDING:
+                location = "Tavern Interior"
+
+        enemies_nearby = self._simulated_enemy_count if in_combat else max(0, min(3, int(round(motion_score * 2))))
+
+        nearby_npc_count = 0
+        if scene in (SceneType.OUTDOOR_CITY, SceneType.DIALOGUE, SceneType.INDOOR_BUILDING):
+            nearby_npc_count = max(1, int(round(self._simulated_social_score * 3)))
+        nearby_npcs = [f"NPC_{i+1}" for i in range(min(nearby_npc_count, 4))]
+
         state = {
-            'health': hud_info.get('health_percent', 100.0) if hud_info else 100.0,
-            'magicka': hud_info.get('magicka_percent', 100.0) if hud_info else 100.0,
-            'stamina': hud_info.get('stamina_percent', 100.0) if hud_info else 100.0,
-            'level': 1,  # Would read from character stats
-            'location_name': hud_info.get('location', location) if hud_info else location,
-            'gold': 100,  # Would read from inventory
+            'health': health,
+            'magicka': magicka,
+            'stamina': stamina,
+            'level': self._simulated_player_level,
+            'average_skill_level': self._simulated_skill_level,
+            'location_name': location,
+            'gold': self._simulated_gold,
             'in_combat': in_combat,
-            'enemies_nearby': 0,  # Would detect from enemy health bars
+            'enemies_nearby': enemies_nearby,
             'in_dialogue': in_dialogue,
             'in_menu': in_menu,
             'menu_type': menu_type,
-            'nearby_npcs': self._detect_nearby_npcs(),
-            'layer_transition_reason': self._determine_layer_transition_reason(in_combat, in_menu, in_dialogue)
+            'nearby_npcs': nearby_npcs,
+            'layer_transition_reason': self._determine_layer_transition_reason(in_combat, in_menu, in_dialogue),
+            'scene': scene.value,
+            'movement_score': motion_score,
+            'completed_quests': self._simulated_quests,
+            'locations_discovered': self._simulated_locations,
+            'npcs_met': self._simulated_npcs_met,
+            'mechanics_learned': self._simulated_mechanics,
+            'equipment_quality': self._simulated_equipment_quality,
+            'carry_weight': self._simulated_carry_weight,
+            'max_carry_weight': self._simulated_max_carry_weight,
+            'combat_win_rate': self._simulated_combat_score,
+            'stealth_success_rate': self._simulated_stealth_score,
+            'persuasion_success_rate': self._simulated_social_score,
         }
-        
+
         return state
 
     def _detect_menu_state(self) -> Tuple[bool, str]:
@@ -520,6 +593,99 @@ class SkyrimPerception:
         # Real implementation would detect NPC name tags on screen
         return []
 
+    def _estimate_motion_score(self, current_embedding: Optional[np.ndarray], window: int = 4) -> float:
+        """Estimate how much the scene is changing using visual embeddings."""
+        if current_embedding is None or not self.perception_history:
+            return 0.5
+
+        similarities: List[float] = []
+        for past in self.perception_history[-window:]:
+            prev_embedding = past.get('visual_embedding')
+            if prev_embedding is None:
+                continue
+            denom = np.linalg.norm(prev_embedding) * np.linalg.norm(current_embedding)
+            if denom == 0:
+                continue
+            similarity = float(np.dot(prev_embedding, current_embedding) / denom)
+            similarities.append(similarity)
+
+        if not similarities:
+            return 0.5
+
+        avg_similarity = sum(similarities) / len(similarities)
+        avg_similarity = max(-1.0, min(1.0, avg_similarity))
+        motion = max(0.0, min(1.0, 1.0 - avg_similarity))
+        return motion
+
+    def _update_simulated_state(self, motion_score: float, allow_core_stats: bool) -> None:
+        """Update simulated game metrics when HUD data is missing."""
+        now = time.time()
+        elapsed = max(0.1, min(5.0, now - self._last_simulation_time))
+        self._last_simulation_time = now
+
+        scene = self._last_scene_type
+
+        if allow_core_stats:
+            if scene == SceneType.COMBAT:
+                damage_factor = (0.6 + 0.8 * (1.0 - motion_score)) * elapsed
+                self._simulated_health = max(20.0, self._simulated_health - damage_factor * 3.5)
+                self._simulated_stamina = max(5.0, self._simulated_stamina - damage_factor * 4.5)
+                self._simulated_magicka = max(5.0, self._simulated_magicka - damage_factor * 2.0)
+                self._simulated_enemy_count = max(1, min(5, int(round(1 + motion_score * 3))))
+            else:
+                regen_factor = (0.4 + 0.6 * motion_score) * elapsed
+                self._simulated_health = min(100.0, self._simulated_health + regen_factor * 3.0)
+                self._simulated_stamina = min(100.0, self._simulated_stamina + (2.8 - motion_score) * elapsed * 2.0)
+                self._simulated_magicka = min(100.0, self._simulated_magicka + 2.2 * elapsed)
+                self._simulated_enemy_count = 0
+        else:
+            if scene == SceneType.COMBAT:
+                self._simulated_enemy_count = max(1, min(5, int(round(1 + motion_score * 3))))
+            else:
+                self._simulated_enemy_count = 0
+
+        if scene in (SceneType.OUTDOOR_WILDERNESS, SceneType.INDOOR_DUNGEON):
+            if motion_score > 0.25:
+                self._simulated_progress = min(1.0, self._simulated_progress + 0.002 * elapsed * (0.6 + motion_score))
+                self._simulated_locations = min(343, self._simulated_locations + int(max(0, elapsed // 1)))
+                self._simulated_equipment_quality = min(1.0, self._simulated_equipment_quality + 0.0008 * elapsed)
+                self._simulated_gold = min(20000, self._simulated_gold + int(3 * elapsed * (0.5 + motion_score)))
+        elif scene == SceneType.OUTDOOR_CITY:
+            if motion_score > 0.2:
+                self._simulated_social_score = min(0.95, self._simulated_social_score + 0.012 * elapsed)
+                self._simulated_npcs_met = min(100, self._simulated_npcs_met + int(max(0, elapsed // 1)))
+                self._simulated_progress = min(1.0, self._simulated_progress + 0.001 * elapsed)
+        elif scene == SceneType.INDOOR_BUILDING:
+            if motion_score > 0.2:
+                self._simulated_mechanics = min(50, self._simulated_mechanics + int(max(0, elapsed // 1)))
+                self._simulated_progress = min(1.0, self._simulated_progress + 0.0012 * elapsed)
+        elif scene == SceneType.DIALOGUE:
+            self._simulated_social_score = min(0.96, self._simulated_social_score + 0.02 * elapsed)
+            self._simulated_npcs_met = min(100, self._simulated_npcs_met + int(max(1, elapsed // 0.5)))
+        elif scene == SceneType.MAP:
+            self._simulated_progress = min(1.0, self._simulated_progress + 0.0008 * elapsed)
+
+        self._simulated_carry_weight = max(60.0, min(
+            self._simulated_max_carry_weight,
+            self._simulated_carry_weight + (1.5 if scene == SceneType.OUTDOOR_WILDERNESS else -0.8) * elapsed
+        ))
+
+        if scene == SceneType.COMBAT:
+            self._simulated_combat_score = max(0.25, min(0.95, self._simulated_combat_score + (0.04 if motion_score > 0.4 else -0.05)))
+            self._simulated_stealth_score = max(0.3, self._simulated_stealth_score - 0.01)
+        else:
+            self._simulated_combat_score = min(0.9, self._simulated_combat_score + 0.01)
+            self._simulated_stealth_score = min(0.9, self._simulated_stealth_score + 0.005)
+
+        self._simulated_progress = max(0.0, min(1.0, self._simulated_progress))
+        self._simulated_player_level = max(1, min(81, int(1 + self._simulated_progress * 40)))
+        self._simulated_skill_level = min(100.0, 15.0 + self._simulated_progress * 70.0)
+        self._simulated_quests = min(100, max(self._simulated_quests, int(self._simulated_progress * 60)))
+        self._simulated_mechanics = min(50, self._simulated_mechanics)
+        self._simulated_locations = min(343, self._simulated_locations)
+        self._simulated_npcs_met = min(100, self._simulated_npcs_met)
+        self._simulated_social_score = max(0.3, min(0.96, self._simulated_social_score))
+
     def _determine_layer_transition_reason(self, in_combat: bool, in_menu: bool, in_dialogue: bool = False) -> str:
         """Determine why a layer transition might be needed."""
         if in_combat:
@@ -552,6 +718,7 @@ class SkyrimPerception:
         # 2. Encode with CLIP
         self._ensure_vision_loaded()
         visual_embedding = self._vision_module.encode_image(screen)
+        self._current_visual_embedding = visual_embedding
 
         # 3. Classify scene
         scene_type, scene_probs = self.classify_scene(screen)

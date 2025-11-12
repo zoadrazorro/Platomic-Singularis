@@ -26,7 +26,7 @@ Design principles:
 import asyncio
 import time
 import random
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
 import numpy as np
 from loguru import logger
@@ -420,6 +420,13 @@ class SkyrimAGI:
         self.stuck_recovery_attempts = 0  # Count recovery attempts
         self.last_stuck_detection_time = 0  # Prevent spam
         self.stuck_detection_cooldown = 10.0  # Seconds between detections
+
+        # Sensorimotor feedback tracking
+        self.sensorimotor_state: Optional[Dict[str, Any]] = None
+        self.sensorimotor_similarity_streak: int = 0
+        self.sensorimotor_last_cycle: int = -1
+        self.sensorimotor_high_similarity_threshold: float = 0.90
+        self.sensorimotor_required_streak: int = 3
         
         print("Skyrim AGI initialization complete.")
         print("[OK] Skyrim AGI initialized with CONSCIOUSNESS INTEGRATION\n")
@@ -1503,6 +1510,9 @@ class SkyrimAGI:
         self.repeated_action_count = 0
         self.last_visual_embedding = None
         self.visual_similarity_threshold = 0.95  # 95% similar = stuck
+        self.sensorimotor_state = None
+        self.sensorimotor_similarity_streak = 0
+        self.sensorimotor_last_cycle = -1
         
         # Thresholds
         self.max_consecutive_failures = 5
@@ -2166,6 +2176,7 @@ Local Vision Model Analysis:
                     
                     # Compute visual similarity if we have embeddings
                     visual_similarity_info = ""
+                    similarity = None
                     if perception.get('visual_embedding') is not None and self.last_visual_embedding is not None:
                         import numpy as np
                         similarity = np.dot(perception.get('visual_embedding'), self.last_visual_embedding) / (
@@ -2206,6 +2217,8 @@ Local Vision Model Analysis:
 - Confidence: [0.0-1.0]
 """
                     
+                    analysis = ""
+                    thinking = ""
                     try:
                         print("[SENSORIMOTOR] Invoking Claude Sonnet 4.5 with extended thinking...")
                         sensorimotor_result = await asyncio.wait_for(
@@ -2300,7 +2313,6 @@ EXTENDED THINKING PROCESS:
                                 contribution_strength=0.7,
                                 context={'purpose': 'sensorimotor_visual'}
                             )
-                        
                     except asyncio.TimeoutError:
                         print("[SENSORIMOTOR] Timed out after 90s")
                         self.hebbian.record_activation(
@@ -2316,6 +2328,14 @@ EXTENDED THINKING PROCESS:
                             system_name='sensorimotor_claude45',
                             success=False,
                             contribution_strength=0.2
+                        )
+                    finally:
+                        self._update_sensorimotor_state(
+                            cycle=cycle_count,
+                            similarity=similarity,
+                            analysis=analysis,
+                            has_thinking=bool(thinking),
+                            visual_context=visual_analysis
                         )
                     
                     print("="*70 + "\n")
@@ -3809,6 +3829,11 @@ COHERENCE GAIN: <estimate 0.0-1.0 how much this increases understanding>
             print(f"[PLANNING] Current layer: {current_layer}")
             print(f"[PLANNING] Available actions: {available_actions}")
 
+            override_action = self._sensorimotor_override(available_actions, game_state)
+            if override_action:
+                self.stats['heuristic_action_count'] += 1
+                return override_action
+
             # Prepare state dict for RL
             state_dict = game_state.to_dict()
             state_dict.update({
@@ -4617,6 +4642,103 @@ QUICK DECISION - Choose ONE action from available list:"""
                     return standard_action
         
         # No match found
+
+    def _sensorimotor_override(self, available_actions: List[str], game_state) -> Optional[str]:
+        """Optionally override planning when sensorimotor loop reports a stuck state."""
+        feedback = self.sensorimotor_state
+        if not feedback:
+            return None
+
+        feedback_cycle = feedback.get('cycle', -1)
+        if feedback_cycle == -1 or self.cycle_count - feedback_cycle > 6:
+            return None  # Feedback too old to trust
+
+        if not feedback.get('should_override'):
+            return None
+
+        reason = feedback.get('reason', 'sensorimotor_stuck')
+        similarity = feedback.get('visual_similarity')
+        streak = feedback.get('similarity_streak', 0)
+        print(f"[PLANNING] Sensorimotor override engaged (reason: {reason}, similarity={similarity}, streak={streak})")
+
+        recovery_priority = []
+        if not game_state.in_menu and 'activate' in available_actions:
+            recovery_priority.append('activate')
+        if 'jump' in available_actions:
+            recovery_priority.append('jump')
+        if 'turn_left' in available_actions:
+            recovery_priority.append('turn_left')
+        if 'turn_right' in available_actions:
+            recovery_priority.append('turn_right')
+        if 'move_backward' in available_actions:
+            recovery_priority.append('move_backward')
+        if 'look_around' in available_actions:
+            recovery_priority.append('look_around')
+        if 'sneak' in available_actions:
+            recovery_priority.append('sneak')
+
+        for candidate in recovery_priority:
+            if candidate != self.last_executed_action:
+                print(f"[PLANNING] → Sensorimotor recovery action: {candidate}")
+                feedback['should_override'] = False
+                feedback['last_override_cycle'] = self.cycle_count
+                feedback['last_forced_action'] = candidate
+                return candidate
+
+        if available_actions:
+            fallback_pool = [a for a in available_actions if a != self.last_executed_action]
+            fallback = random.choice(fallback_pool or available_actions)
+            print(f"[PLANNING] → Sensorimotor fallback action: {fallback}")
+            feedback['should_override'] = False
+            feedback['last_override_cycle'] = self.cycle_count
+            feedback['last_forced_action'] = fallback
+            return fallback
+
+        return None
+
+    def _update_sensorimotor_state(
+        self,
+        cycle: int,
+        similarity: Optional[float],
+        analysis: str,
+        has_thinking: bool,
+        visual_context: str
+    ) -> None:
+        """Persist sensorimotor feedback for action planning overrides."""
+        if self.sensorimotor_last_cycle != -1 and cycle - self.sensorimotor_last_cycle > 6:
+            self.sensorimotor_similarity_streak = 0
+
+        self.sensorimotor_last_cycle = cycle
+
+        high_similarity = similarity is not None and similarity >= self.sensorimotor_high_similarity_threshold
+        if high_similarity:
+            self.sensorimotor_similarity_streak += 1
+        else:
+            self.sensorimotor_similarity_streak = 0
+
+        combined_text = f"{analysis}\n{visual_context}".lower()
+        stuck_keywords = any(keyword in combined_text for keyword in ("stuck", "no movement", "blocked"))
+        should_override = stuck_keywords or (
+            high_similarity and self.sensorimotor_similarity_streak >= self.sensorimotor_required_streak
+        )
+
+        reason = "analysis_stuck" if stuck_keywords else (
+            "similarity_loop" if high_similarity else ""
+        )
+
+        self.sensorimotor_state = {
+            'cycle': cycle,
+            'visual_similarity': similarity,
+            'similarity_streak': self.sensorimotor_similarity_streak,
+            'analysis': analysis,
+            'visual_context': visual_context,
+            'has_thinking': has_thinking,
+            'stuck_keywords': stuck_keywords,
+            'high_similarity': high_similarity,
+            'should_override': should_override,
+            'reason': reason,
+            'timestamp': time.time(),
+        }
 
     def _evaluate_action_success(
         self,

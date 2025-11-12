@@ -50,11 +50,12 @@ Result: "Stuck in combat animation/state"
 ```
 
 **Root Cause:**
-- Scene classifier correctly detects `SceneType.COMBAT`
-- But `game_state.enemies_nearby = 0` (heuristic reader fails)
-- Meta-strategy requires `enemies_nearby > 0` to engage
+- Scene classifier detects `SceneType.COMBAT` from "weapons drawn"
+- But agent NOT in active combat (post-combat or stuck in stance)
+- `game_state.in_combat = False` and `enemies_nearby = 0`
+- Meta-strategy correctly avoids combat (no enemies present)
 - Falls back to "explore" action
-- Gets stuck in combat animation loop
+- Gets stuck in combat-ready stance/animation
 
 **Impact:**
 - 20/20 action outputs = "explore"
@@ -103,32 +104,40 @@ Gemini Vision Analysis: [Not available]
 
 ## 🔧 **Fixes Applied**
 
-### **Fix 1: Trust Scene Classifier for Combat**
+### **Fix 1: Improve Combat Scene Detection**
 
-**Before:**
+**Problem:** Scene classifier triggers on "weapons drawn" even when not in active combat
+
+**Solution 1 - Stricter Combat Logic:**
 ```python
-if (game_state.in_combat or scene_type == SceneType.COMBAT) and game_state.enemies_nearby > 0:
-    # Only engage if enemies detected by heuristic
+# Require BOTH scene=combat AND (in_combat OR enemies>0)
+in_actual_combat = (
+    scene_type == SceneType.COMBAT and 
+    (game_state.in_combat or game_state.enemies_nearby > 0)
+)
+
+# Handle false positive: combat scene but no active combat
+elif scene_type == SceneType.COMBAT and not in_actual_combat:
+    print(f"[META-STRATEGY] Combat scene but no active combat (post-combat or stuck stance)")
+    # Try to exit combat stance
+    if 'sneak' in available_actions:
+        return 'sneak'  # Sneaking exits combat stance
 ```
 
-**After:**
+**Solution 2 - Better Scene Prompt:**
 ```python
-in_combat_scene = (game_state.in_combat or scene_type == SceneType.COMBAT)
+# Before
+"combat scene with weapons drawn, enemies attacking, and health bar flashing"
 
-if in_combat_scene:
-    print(f"[META-STRATEGY] Combat detected! Scene: {scene_type.value}")
-    
-    # Trust scene classifier even if enemies_nearby=0
-    if game_state.enemies_nearby > 2 or (scene_type == SceneType.COMBAT and game_state.enemies_nearby == 0):
-        action = 'power_attack' if 'power_attack' in available_actions else 'attack'
-        return action
+# After
+"active combat with enemies attacking, health bar visible, and dynamic action - NOT just weapons drawn"
 ```
 
 **Rationale:**
-- CLIP scene classifier is more reliable than heuristic enemy detection
-- Scene type = COMBAT means there ARE enemies (visual evidence)
-- Heuristic reader may fail to detect enemies in UI
-- Trust the vision model over simple heuristics
+- "Weapons drawn" alone doesn't mean active combat
+- Could be post-combat, stuck in stance, or transitioning
+- Need confirmation from game state (in_combat OR enemies_nearby)
+- Use sneak to exit combat-ready stance when no enemies present
 
 ---
 

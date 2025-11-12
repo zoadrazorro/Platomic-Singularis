@@ -1382,27 +1382,67 @@ Provide: 1) What you see, 2) Spatial layout, 3) Threats/opportunities, 4) Recomm
                 
                 # RL reasoning neuron already connected to huihui
                 
-                # Use RL reasoning neuron to think about Q-values (with meta-strategic guidance)
-                rl_reasoning = await self.rl_reasoning_neuron.reason_about_q_values(
-                    state=state_dict,
-                    q_values=q_values,
-                    available_actions=available_actions,
-                    context={
-                        'motivation': motivation.dominant_drive().value,
-                        'terrain_type': self.skyrim_world.classify_terrain_from_scene(
-                            scene_type.value,
-                            game_state.in_combat
-                        ),
-                        'meta_strategy': meta_context  # Add strategic guidance
-                    }
+                # Start parallel pipelines: Huihui (deep) + Heuristic (fast)
+                print("[PARALLEL] Starting dual pipeline: Huihui (strategic) + Heuristic (fast)")
+                
+                # Create heuristic task (runs in parallel)
+                async def fast_heuristic_pipeline():
+                    """Fast heuristic reasoning while Huihui thinks."""
+                    print("[HEURISTIC-FAST] Computing quick fallback action...")
+                    
+                    # Quick Q-value based selection
+                    top_q_action = max(
+                        [(a, q_values.get(a, 0.0)) for a in available_actions],
+                        key=lambda x: x[1]
+                    )[0]
+                    
+                    # Context-aware adjustment
+                    if game_state.health < 30 and 'rest' in available_actions:
+                        return 'rest', "Low health emergency"
+                    elif game_state.in_combat and game_state.enemies_nearby > 2 and 'power_attack' in available_actions:
+                        return 'power_attack', "Multiple enemies"
+                    elif not game_state.in_combat and 'move_forward' in available_actions:
+                        return 'move_forward', "Safe exploration"
+                    else:
+                        return top_q_action, f"Top Q-value action"
+                
+                # Run both in parallel
+                huihui_task = asyncio.create_task(
+                    self.rl_reasoning_neuron.reason_about_q_values(
+                        state=state_dict,
+                        q_values=q_values,
+                        available_actions=available_actions,
+                        context={
+                            'motivation': motivation.dominant_drive().value,
+                            'terrain_type': self.skyrim_world.classify_terrain_from_scene(
+                                scene_type.value,
+                                game_state.in_combat
+                            ),
+                            'meta_strategy': meta_context
+                        }
+                    )
                 )
                 
-                action = rl_reasoning.recommended_action
-                print(f"[RL-NEURON] Action: {action} (tactical score: {rl_reasoning.tactical_score:.2f})")
-                print(f"[RL-NEURON] Reasoning: {rl_reasoning.reasoning}")
+                heuristic_task = asyncio.create_task(fast_heuristic_pipeline())
+                
+                # Wait for both (heuristic will finish first)
+                heuristic_result, rl_reasoning = await asyncio.gather(
+                    heuristic_task,
+                    huihui_task
+                )
+                
+                heuristic_action, heuristic_reason = heuristic_result
+                print(f"[HEURISTIC-FAST] Quick recommendation: {heuristic_action} ({heuristic_reason})")
+                print(f"[HUIHUI-RL] Strategic recommendation: {rl_reasoning.recommended_action} (score: {rl_reasoning.tactical_score:.2f})")
+                print(f"[HUIHUI-RL] Reasoning: {rl_reasoning.reasoning[:150]}...")
                 if rl_reasoning.strategic_insight:
-                    print(f"[RL-NEURON] Insight: {rl_reasoning.strategic_insight}")
-                return action
+                    print(f"[HUIHUI-RL] Insight: {rl_reasoning.strategic_insight[:100]}...")
+                
+                # Store both recommendations for Phi-4 to consider
+                huihui_recommendation = rl_reasoning.recommended_action
+                huihui_reasoning = rl_reasoning.reasoning
+                heuristic_recommendation = heuristic_action
+                heuristic_reasoning = heuristic_reason
 
             # Get strategic analysis from world model (layer effectiveness)
             strategic_analysis = self.skyrim_world.get_strategic_layer_analysis(
@@ -1483,16 +1523,26 @@ Provide: 1) What you see, 2) Spatial layout, 3) Threats/opportunities, 4) Recomm
             elif optimal_layer:
                 print(f"[META-STRATEGY] Already in optimal layer: {current_layer}")
 
-            # Always use Phi-4 for action planning (fast, decisive)
+            # Always use Phi-4 for final action selection (fast, decisive)
             if self.action_planning_llm:
-                print("[PLANNING] Using Phi-4 for action planning...")
+                print("[PLANNING] Using Phi-4 for final action selection...")
                 try:
+                    # Pass both Huihui and heuristic recommendations to Phi-4 if available
+                    huihui_context = None
+                    if 'huihui_recommendation' in locals():
+                        huihui_context = {
+                            'huihui_recommendation': huihui_recommendation,
+                            'huihui_reasoning': huihui_reasoning[:200],  # Truncate for speed
+                            'heuristic_recommendation': heuristic_recommendation if 'heuristic_recommendation' in locals() else None,
+                            'heuristic_reasoning': heuristic_reasoning if 'heuristic_reasoning' in locals() else None
+                        }
+                    
                     llm_action = await self._plan_action_with_llm(
                         perception, game_state, scene_type, current_layer, available_actions, 
-                        strategic_analysis, motivation
+                        strategic_analysis, motivation, huihui_context
                     )
                     if llm_action:
-                        print(f"[PHI4] Selected action: {llm_action}")
+                        print(f"[PHI4] Final action: {llm_action}")
                         self.stats['llm_action_count'] += 1
                         return llm_action
                     else:
@@ -1632,10 +1682,14 @@ Provide: 1) What you see, 2) Spatial layout, 3) Threats/opportunities, 4) Recomm
         current_layer: str,
         available_actions: list,
         strategic_analysis: dict,
-        motivation
+        motivation,
+        huihui_context: Optional[Dict[str, str]] = None
     ) -> Optional[str]:
         """
-        Use dedicated phi-4-mini LLM for fast terrain-aware action planning.
+        Use Phi-4 for fast action selection, optionally informed by Huihui's strategic reasoning.
+        
+        Args:
+            huihui_context: Optional dict with 'recommendation' and 'reasoning' from Huihui
         
         Returns:
             Action string if LLM planning succeeds, None otherwise
@@ -1650,7 +1704,17 @@ Provide: 1) What you see, 2) Spatial layout, 3) Threats/opportunities, 4) Recomm
         if not llm_interface:
             return None
         
-        # Build compact context for fast phi-4-mini reasoning
+        # Build compact context for fast phi-4 reasoning
+        recommendations_section = ""
+        if huihui_context:
+            recommendations_section = f"""
+PARALLEL ANALYSIS:
+1. Huihui (Strategic): {huihui_context.get('huihui_recommendation', 'N/A')}
+   Reasoning: {huihui_context.get('huihui_reasoning', 'N/A')}
+2. Heuristic (Fast): {huihui_context.get('heuristic_recommendation', 'N/A')}
+   Reasoning: {huihui_context.get('heuristic_reasoning', 'N/A')}
+"""
+        
         context = f"""SKYRIM AGENT - QUICK ACTION DECISION
 
 STATE: HP={game_state.health:.0f} MP={game_state.magicka:.0f} ST={game_state.stamina:.0f}
@@ -1658,7 +1722,7 @@ SCENE: {scene_type.value} | COMBAT: {game_state.in_combat} | LAYER: {current_lay
 LOCATION: {game_state.location_name}
 DRIVE: {motivation.dominant_drive().value}
 
-ACTIONS: {', '.join(available_actions[:8])}
+ACTIONS: {', '.join(available_actions[:8])}{recommendations_section}
 
 TERRAIN STRATEGY:
 - Indoor/Menu: interact, navigate exits

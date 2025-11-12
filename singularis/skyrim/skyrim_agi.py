@@ -629,22 +629,22 @@ class SkyrimAGI:
                     }
                 )
                 
-                # Compute world state and consciousness (with LLM throttling)
-                async with self.llm_semaphore:
-                    world_state = await self.agi.perceive({
-                        'causal': game_state.to_dict(),
-                        'visual': [perception['visual_embedding']],
-                    })
-                    
-                    consciousness_context = {
-                        'motivation': 'unknown',
-                        'cycle': cycle_count,
-                        'scene': scene_type.value
-                    }
-                    current_consciousness = await self.consciousness_bridge.compute_consciousness(
-                        game_state.to_dict(),
-                        consciousness_context
-                    )
+                # Compute world state and consciousness (consciousness runs in parallel, no semaphore)
+                world_state = await self.agi.perceive({
+                    'causal': game_state.to_dict(),
+                    'visual': [perception['visual_embedding']],
+                })
+                
+                consciousness_context = {
+                    'motivation': 'unknown',
+                    'cycle': cycle_count,
+                    'scene': scene_type.value
+                }
+                # Consciousness bridge calls 2 big models in parallel - don't throttle it
+                current_consciousness = await self.consciousness_bridge.compute_consciousness(
+                    game_state.to_dict(),
+                    consciousness_context
+                )
                 
                 print(f"[REASONING] Coherence 𝒞 = {current_consciousness.coherence:.3f}")
                 
@@ -785,15 +785,20 @@ class SkyrimAGI:
                 after_perception = await self.perception.perceive()
                 after_state = after_perception['game_state'].to_dict()
                 
-                # Compute after consciousness
-                consciousness_context = {
-                    'motivation': 'learning',
-                    'cycle': cycle_count,
-                    'scene': after_perception['scene_type'].value
-                }
-                after_consciousness = await self.consciousness_bridge.compute_consciousness(
-                    after_state,
-                    consciousness_context
+                # Use fast heuristic consciousness (skip slow LLM calls in learning loop)
+                # The reasoning loop already computed consciousness, we just need a quick estimate
+                from .skyrim_cognition import SkyrimCognitiveState
+                cognitive_after = SkyrimCognitiveState.from_game_state(after_state)
+                
+                # Create simple consciousness state without LLM calls
+                after_consciousness = ConsciousnessState(
+                    coherence=cognitive_after.overall_quality * 0.5 + 0.1,  # Quick estimate
+                    coherence_ontical=cognitive_after.survival * 0.4,
+                    coherence_structural=cognitive_after.progression * 0.3,
+                    coherence_participatory=cognitive_after.effectiveness * 0.5,
+                    game_quality=cognitive_after.overall_quality,
+                    consciousness_level=0.1,  # Minimal estimate
+                    self_awareness=0.3  # Default
                 )
                 
                 # Build before state

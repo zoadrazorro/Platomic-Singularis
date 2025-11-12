@@ -23,8 +23,8 @@ class LocalMoEConfig:
     expert_model: str = "qwen/qwen3-4b-thinking-2507"
     synthesizer_model: str = "microsoft/phi-4"
     base_url: str = "http://localhost:1234/v1"
-    timeout: int = 10  # Timeout per expert query
-    max_tokens: int = 512
+    timeout: int = 15  # Timeout per expert query (increased for thinking models)
+    max_tokens: int = 1024  # Increased for better reasoning depth
 
 
 class LocalMoEOrchestrator:
@@ -82,7 +82,7 @@ class LocalMoEOrchestrator:
             base_url=self.config.base_url,
             model_name=self.config.synthesizer_model,
             timeout=self.config.timeout,
-            max_tokens=256
+            max_tokens=512  # Increased for better synthesis
         )
         self.synthesizer = LMStudioClient(synth_config)
         logger.info(f"✓ Synthesizer: {self.config.synthesizer_model}")

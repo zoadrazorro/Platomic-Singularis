@@ -18,7 +18,7 @@ class LMStudioConfig:
     base_url: str = "http://localhost:1234/v1"
     model_name: str = "microsoft/phi-4-mini-reasoning"
     temperature: float = 0.7
-    max_tokens: int = 2048
+    max_tokens: int = 4096  # Increased for Phi-4 models
     timeout: int = 120
     
 

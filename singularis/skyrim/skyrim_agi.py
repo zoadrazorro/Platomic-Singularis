@@ -4071,24 +4071,28 @@ Format: ACTION: <action_name>"""
             print(f"[META-STRATEGY] Evaluating layer switches (current: {current_layer})")
             
             # Combat situations - prioritize Combat layer if effective
-            # Detect combat from scene type OR game state
-            in_combat_scene = (game_state.in_combat or scene_type == SceneType.COMBAT)
+            # Only engage if BOTH scene=combat AND (in_combat OR enemies detected)
+            # This prevents false positives from "weapons drawn" stance
+            in_actual_combat = (
+                scene_type == SceneType.COMBAT and 
+                (game_state.in_combat or game_state.enemies_nearby > 0)
+            )
             
-            if in_combat_scene:
-                print(f"[META-STRATEGY] Combat detected! Scene: {scene_type.value}, in_combat: {game_state.in_combat}, enemies: {game_state.enemies_nearby}")
+            if in_actual_combat:
+                print(f"[META-STRATEGY] Active combat! Scene: {scene_type.value}, in_combat: {game_state.in_combat}, enemies: {game_state.enemies_nearby}")
                 
                 # Switch to Combat layer
                 if current_layer != "Combat":
                     combat_effectiveness = strategic_analysis['layer_effectiveness'].get('Combat', 0.5)
-                    optimal_layer = "Combat"
-                    print(f"[META-STRATEGY] Switching to Combat layer (effectiveness: {combat_effectiveness:.2f})")
+                    if combat_effectiveness > 0.6:
+                        optimal_layer = "Combat"
+                        print(f"[META-STRATEGY] Switching to Combat layer (effectiveness: {combat_effectiveness:.2f})")
                 
-                # Choose combat action - even if enemies_nearby not detected (scene classifier knows better)
-                if game_state.enemies_nearby > 2 or (scene_type == SceneType.COMBAT and game_state.enemies_nearby == 0):
-                    # Multiple enemies or combat scene detected
+                # Choose combat action based on context
+                if game_state.enemies_nearby > 2:
                     action = 'power_attack' if 'power_attack' in available_actions else 'attack'
                     if action in available_actions:
-                        print(f"[META-STRATEGY] → {action} (combat scene)")
+                        print(f"[META-STRATEGY] → {action} (multiple enemies)")
                         return action
                 elif game_state.health < 50:
                     action = 'block' if 'block' in available_actions else 'attack'
@@ -4098,10 +4102,14 @@ Format: ACTION: <action_name>"""
                 elif 'attack' in available_actions:
                     print(f"[META-STRATEGY] → attack (engage enemy)")
                     return 'attack'
-                else:
-                    # No combat actions available - force exploration to reposition
-                    print(f"[META-STRATEGY] → explore (no combat actions available, repositioning)")
-                    return 'explore'
+                # If no combat actions available, fall through
+            elif scene_type == SceneType.COMBAT and not in_actual_combat:
+                # Combat scene detected but no active combat - probably post-combat or stuck in stance
+                print(f"[META-STRATEGY] Combat scene but no active combat (post-combat or stuck stance)")
+                # Try to exit combat stance by exploring
+                if 'sneak' in available_actions:
+                    print(f"[META-STRATEGY] → sneak (exit combat stance)")
+                    return 'sneak'
 
             # Low health - consider Menu layer for healing
             if game_state.health < 30:

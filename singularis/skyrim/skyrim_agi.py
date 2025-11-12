@@ -1583,6 +1583,23 @@ class SkyrimAGI:
                 print(f"[MAIN BRAIN] 🎯 Session ID: {self.main_brain.session_id}")
             except Exception as e:
                 print(f"[MAIN BRAIN] ⚠️ Failed to generate report: {e}")
+            
+            # Cleanup aiohttp sessions
+            print("\n[CLEANUP] Closing HTTP sessions...")
+            try:
+                loop = asyncio.get_event_loop()
+                if self.openai_client:
+                    loop.run_until_complete(self.openai_client.close())
+                if hasattr(self, 'hybrid_llm') and self.hybrid_llm:
+                    if hasattr(self.hybrid_llm, 'gemini_client'):
+                        loop.run_until_complete(self.hybrid_llm.gemini_client.close())
+                    if hasattr(self.hybrid_llm, 'claude_client'):
+                        loop.run_until_complete(self.hybrid_llm.claude_client.close())
+                if hasattr(self, 'sensorimotor_llm') and self.sensorimotor_llm:
+                    loop.run_until_complete(self.sensorimotor_llm.close())
+                print("[CLEANUP] ✓ All sessions closed")
+            except Exception as e:
+                print(f"[CLEANUP] Warning: {e}")
 
     async def _autonomous_play_async(self, duration_seconds: int, start_time: float):
         """
@@ -4914,9 +4931,9 @@ QUICK DECISION - Choose ONE action from available list:"""
                 print(f"  Unity index: {latest.unity_index:.3f}")
                 
                 # Show top performing nodes
-                if latest.node_measurements:
+                if latest.node_coherences:
                     sorted_nodes = sorted(
-                        latest.node_measurements.items(),
+                        latest.node_coherences.items(),
                         key=lambda x: x[1].coherence,
                         reverse=True
                     )[:5]

@@ -1615,13 +1615,16 @@ class SkyrimAGI:
                         if cycle_count % 10 == 0:
                             print(f"[AUX-EXPLORE] Moving forward (cycle {cycle_count})")
                         
-                        await self.actions.execute('move_forward', duration=1.5)
+                        from singularis.skyrim.actions import Action, ActionType
+                        move_action = Action(ActionType.MOVE_FORWARD, duration=1.5)
+                        await self.actions.execute(move_action)
                         last_move_time = current_time
                         
                         # Occasional jump for terrain navigation
                         if random.random() < 0.2:  # 20% chance
                             await asyncio.sleep(0.3)
-                            await self.actions.execute('jump', duration=0.3)
+                            jump_action = Action(ActionType.JUMP, duration=0.3)
+                            await self.actions.execute(jump_action)
                             if cycle_count % 10 == 0:
                                 print(f"[AUX-EXPLORE] Jump for terrain navigation")
                     
@@ -1632,14 +1635,22 @@ class SkyrimAGI:
                 # LOOK AROUND - Explore environment
                 if current_time - last_look_time >= look_interval:
                     try:
+                        from singularis.skyrim.actions import Action, ActionType
                         # Random camera movement
-                        look_direction = random.choice(['look_left', 'look_right', 'look_up', 'look_down'])
+                        look_types = {
+                            'look_left': ActionType.LOOK_LEFT,
+                            'look_right': ActionType.LOOK_RIGHT,
+                            'look_up': ActionType.LOOK_UP,
+                            'look_down': ActionType.LOOK_DOWN
+                        }
+                        look_direction = random.choice(list(look_types.keys()))
                         look_duration = random.uniform(0.3, 0.8)
                         
                         if cycle_count % 10 == 0:
                             print(f"[AUX-EXPLORE] Looking around: {look_direction}")
                         
-                        await self.actions.execute(look_direction, duration=look_duration)
+                        look_action = Action(look_types[look_direction], duration=look_duration)
+                        await self.actions.execute(look_action)
                         last_look_time = current_time
                     
                     except Exception as e:
@@ -1649,12 +1660,15 @@ class SkyrimAGI:
                 # CHANGE DIRECTION - Avoid getting stuck
                 if current_time - last_direction_change >= direction_change_interval:
                     try:
+                        from singularis.skyrim.actions import Action, ActionType
                         # Turn to a new direction
-                        turn_direction = random.choice(['look_left', 'look_right'])
+                        turn_types = {'look_left': ActionType.LOOK_LEFT, 'look_right': ActionType.LOOK_RIGHT}
+                        turn_direction = random.choice(list(turn_types.keys()))
                         turn_amount = random.uniform(1.0, 2.0)
                         
                         print(f"[AUX-EXPLORE] Changing direction: {turn_direction} for {turn_amount:.1f}s")
-                        await self.actions.execute(turn_direction, duration=turn_amount)
+                        turn_action = Action(turn_types[turn_direction], duration=turn_amount)
+                        await self.actions.execute(turn_action)
                         last_direction_change = current_time
                     
                     except Exception as e:
@@ -3292,14 +3306,9 @@ COHERENCE GAIN: <estimate 0.0-1.0 how much this increases understanding>
                             self.stats['gemini_stuck_detections'] = self.stats.get('gemini_stuck_detections', 0) + 1
                             return 'sneak'
                 
-                # Try cloud LLM system (but not every cycle to avoid rate limits)
-                # Use cloud LLMs every 2nd cycle or in critical situations
-                use_cloud_llm = (
-                    self.cycle_count % 2 == 0 or  # Every 2nd cycle
-                    game_state.health < 50 or  # Low health
-                    game_state.enemies_nearby > 2 or  # Multiple enemies
-                    game_state.in_combat  # In combat
-                )
+                # Try cloud LLM system every cycle for maximum intelligence
+                # Always use cloud LLMs (Gemini + Claude)
+                use_cloud_llm = True  # Every cycle now!
                 
                 # Start cloud LLM query in background (non-blocking)
                 cloud_task = None
@@ -3322,8 +3331,6 @@ COHERENCE GAIN: <estimate 0.0-1.0 how much this increases understanding>
                             use_full_moe=is_critical
                         )
                     )
-                else:
-                    print(f"[RATE-LIMIT] Skipping cloud LLM (cycle {self.cycle_count % 2}/2)")
                 
                 # Fallback: Start Local MoE in background (4x Qwen3-VL + Phi-4)
                 local_moe_task = None

@@ -174,23 +174,28 @@ Receives Singularis output and provides:
 
 ## Cloud LLM Call Frequency
 
-### Throttling Strategy
+### Call Strategy
 
-**Every 2nd cycle OR critical situations:**
-- Low health (< 50)
-- Multiple enemies (> 2)
-- In combat
-- High-priority decisions
+**Every cycle (100% of the time):**
+- Gemini + Claude called on every reasoning cycle
+- Maximum intelligence and responsiveness
+- No throttling or rate limiting
 
 **Critical situations trigger full MoE+Hybrid:**
 - Health < 30
 - Enemies > 3
 - Combat + low health (< 60)
+- Uses all 9 experts (6 Gemini + 3 Claude) in parallel
 
-**Rate limiting:**
-- Prevents API overload
-- Respects provider limits
-- Falls back to local LLMs on failure
+**Normal situations use Hybrid only:**
+- Single Gemini (vision) + Single Claude (reasoning)
+- Faster response time
+- Lower API usage
+
+**Fallback strategy:**
+- Local LLMs activate if cloud fails
+- Local MoE runs in parallel as backup
+- Ensures continuous operation
 
 ---
 

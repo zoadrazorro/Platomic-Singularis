@@ -80,6 +80,12 @@ class SkyrimConfig:
     perception_interval: float = 0.5  # How often to perceive (seconds)
     max_concurrent_llm_calls: int = 4  # With 4 models (2 mistral + 2 big), can handle 4 concurrent
     reasoning_throttle: float = 0.5  # Min seconds between reasoning cycles
+    
+    # Fast reactive loop
+    enable_fast_loop: bool = True  # Enable fast reactive loop for immediate responses
+    fast_loop_interval: float = 1.0  # Fast loop runs every second
+    fast_health_threshold: float = 30.0  # Health % to trigger emergency healing
+    fast_danger_threshold: int = 3  # Number of enemies to trigger defensive actions
 
     # Core models
     phi4_action_model: str = "microsoft/phi-4"  # Action planning
@@ -250,6 +256,7 @@ class SkyrimAGI:
         self.perception_queue: asyncio.Queue = asyncio.Queue(maxsize=5)
         self.action_queue: asyncio.Queue = asyncio.Queue(maxsize=self.config.action_queue_size)
         self.learning_queue: asyncio.Queue = asyncio.Queue(maxsize=10)
+        self.fast_action_queue: asyncio.Queue = asyncio.Queue(maxsize=5)  # Fast reactive actions
         
         # Resource management for async execution
         self.llm_semaphore: Optional[asyncio.Semaphore] = None  # Limit concurrent LLM calls
@@ -277,8 +284,10 @@ class SkyrimAGI:
             'llm_action_count': 0,
             'heuristic_action_count': 0,
             'rl_action_count': 0,
+            'fast_action_count': 0,  # Fast reactive actions
             'planning_times': [],  # Track planning duration
             'execution_times': [],  # Track execution duration
+            'fast_action_times': []  # Track fast action execution
         }
 
         # Set up controller reference in perception for layer awareness
@@ -510,6 +519,12 @@ class SkyrimAGI:
             print(f"Reasoning throttle: {self.config.reasoning_throttle}s")
         else:
             print(f"Async mode: DISABLED (sequential execution)")
+        if self.config.enable_fast_loop:
+            print(f"Fast reactive loop: ENABLED ({self.config.fast_loop_interval}s interval)")
+            print(f"  Health threshold: {self.config.fast_health_threshold}%")
+            print(f"  Danger threshold: {self.config.fast_danger_threshold} enemies")
+        else:
+            print(f"Fast reactive loop: DISABLED")
         print("=" * 60)
         print()
 
@@ -548,6 +563,7 @@ class SkyrimAGI:
         Async gameplay mode where reasoning, actions, and perception run in parallel.
         
         This prevents blocking during LLM reasoning - the agent continues to act.
+        Now includes fast reactive loop for immediate survival responses.
         """
         print("[ASYNC] Starting parallel execution loops...")
         
@@ -557,14 +573,17 @@ class SkyrimAGI:
         action_task = asyncio.create_task(self._action_loop(duration_seconds, start_time))
         learning_task = asyncio.create_task(self._learning_loop(duration_seconds, start_time))
         
+        # Start fast reactive loop if enabled
+        tasks = [perception_task, reasoning_task, action_task, learning_task]
+        if self.config.enable_fast_loop:
+            fast_loop_task = asyncio.create_task(self._fast_reactive_loop(duration_seconds, start_time))
+            tasks.append(fast_loop_task)
+            print("[ASYNC] Fast reactive loop ENABLED")
+        else:
+            print("[ASYNC] Fast reactive loop DISABLED")
+        
         # Wait for all tasks to complete (or any to fail)
-        await asyncio.gather(
-            perception_task,
-            reasoning_task,
-            action_task,
-            learning_task,
-            return_exceptions=True
-        )
+        await asyncio.gather(*tasks, return_exceptions=True)
         
         print("[ASYNC] All parallel loops completed")
 
@@ -978,6 +997,157 @@ Analyze the image and provide:
                 await asyncio.sleep(1.0)
         
         print("[LEARNING] Loop ended")
+
+    async def _fast_reactive_loop(self, duration_seconds: int, start_time: float):
+        """
+        Fast reactive loop that executes every second with basic heuristics.
+        
+        This loop provides immediate responses to critical situations without
+        waiting for the slower deliberative reasoning loop. It handles:
+        - Emergency health situations (healing)
+        - Immediate combat threats (blocking, dodging)
+        - Quick environmental responses (falling, fire, traps)
+        
+        The fast loop uses simple heuristics and doesn't involve LLM calls,
+        making it extremely responsive for survival-critical actions.
+        """
+        print("[FAST-LOOP] Fast reactive loop started")
+        print(f"[FAST-LOOP] Interval: {self.config.fast_loop_interval}s")
+        print(f"[FAST-LOOP] Health threshold: {self.config.fast_health_threshold}%")
+        print(f"[FAST-LOOP] Danger threshold: {self.config.fast_danger_threshold} enemies")
+        
+        cycle_count = 0
+        last_fast_action_time = 0
+        
+        while self.running and (time.time() - start_time) < duration_seconds:
+            try:
+                cycle_count += 1
+                cycle_start = time.time()
+                
+                # Get current perception (non-blocking, use cached if available)
+                if self.current_perception is None:
+                    await asyncio.sleep(self.config.fast_loop_interval)
+                    continue
+                
+                game_state = self.current_perception.get('game_state')
+                if game_state is None:
+                    await asyncio.sleep(self.config.fast_loop_interval)
+                    continue
+                
+                scene_type = self.current_perception.get('scene_type', SceneType.UNKNOWN)
+                
+                # Skip fast actions in menus (they don't need reactive responses)
+                if scene_type in [SceneType.INVENTORY, SceneType.MAP, SceneType.DIALOGUE]:
+                    await asyncio.sleep(self.config.fast_loop_interval)
+                    continue
+                
+                # === FAST HEURISTICS ===
+                fast_action = None
+                fast_reason = None
+                priority = 0  # Higher = more urgent
+                
+                # 1. CRITICAL HEALTH - Highest priority
+                if game_state.health < self.config.fast_health_threshold:
+                    if game_state.health < 15:
+                        # Extremely low health - immediate retreat
+                        fast_action = 'retreat'
+                        fast_reason = f"CRITICAL health {game_state.health:.0f}% - retreating"
+                        priority = 100
+                    elif game_state.magicka > 30:
+                        # Try healing spell
+                        fast_action = 'heal'
+                        fast_reason = f"Low health {game_state.health:.0f}% - healing"
+                        priority = 90
+                    else:
+                        # Block and back away
+                        fast_action = 'block'
+                        fast_reason = f"Low health {game_state.health:.0f}%, no magicka - blocking"
+                        priority = 85
+                
+                # 2. OVERWHELMING COMBAT - High priority
+                elif game_state.in_combat and game_state.enemies_nearby >= self.config.fast_danger_threshold:
+                    if game_state.stamina > 40:
+                        # Power attack to clear space
+                        fast_action = 'power_attack'
+                        fast_reason = f"Surrounded by {game_state.enemies_nearby} enemies - power attack"
+                        priority = 70
+                    else:
+                        # Defensive stance
+                        fast_action = 'block'
+                        fast_reason = f"Surrounded by {game_state.enemies_nearby} enemies, low stamina - blocking"
+                        priority = 65
+                
+                # 3. ACTIVE COMBAT - Medium priority
+                elif game_state.in_combat and game_state.enemies_nearby > 0:
+                    # Basic combat response
+                    if game_state.stamina > 50:
+                        fast_action = 'attack'
+                        fast_reason = f"In combat with {game_state.enemies_nearby} enemies - attacking"
+                        priority = 50
+                    else:
+                        fast_action = 'block'
+                        fast_reason = f"In combat, low stamina - blocking to recover"
+                        priority = 45
+                
+                # 4. LOW STAMINA OUT OF COMBAT - Low priority
+                elif game_state.stamina < 20 and not game_state.in_combat:
+                    fast_action = 'wait'
+                    fast_reason = f"Low stamina {game_state.stamina:.0f}% - resting"
+                    priority = 20
+                
+                # 5. RESOURCE MANAGEMENT - Very low priority
+                elif game_state.health < 60 and game_state.magicka > 50 and not game_state.in_combat:
+                    # Preventive healing when safe
+                    fast_action = 'heal'
+                    fast_reason = f"Safe healing opportunity - health {game_state.health:.0f}%"
+                    priority = 10
+                
+                # Execute fast action if one was determined
+                if fast_action and priority > 0:
+                    # Throttle fast actions to avoid spam (minimum 2 seconds between actions)
+                    time_since_last = time.time() - last_fast_action_time
+                    if time_since_last < 2.0:
+                        # Too soon, skip this action
+                        await asyncio.sleep(self.config.fast_loop_interval)
+                        continue
+                    
+                    # Log fast action
+                    if cycle_count % 5 == 0 or priority >= 70:  # Log high priority always
+                        print(f"\n[FAST-LOOP] Cycle {cycle_count} | Priority {priority}")
+                        print(f"[FAST-LOOP] Action: {fast_action} | Reason: {fast_reason}")
+                    
+                    # Execute immediately (bypass normal action queue for critical actions)
+                    execution_start = time.time()
+                    try:
+                        await self._execute_action(fast_action, scene_type)
+                        execution_duration = time.time() - execution_start
+                        
+                        # Update statistics
+                        self.stats['fast_action_count'] += 1
+                        self.stats['fast_action_times'].append(execution_duration)
+                        self.stats['actions_taken'] += 1
+                        
+                        last_fast_action_time = time.time()
+                        
+                        if cycle_count % 5 == 0 or priority >= 70:
+                            print(f"[FAST-LOOP] Executed in {execution_duration:.3f}s")
+                    
+                    except Exception as e:
+                        print(f"[FAST-LOOP] Execution failed: {e}")
+                        # Don't crash the fast loop on errors
+                
+                # Wait for next cycle
+                elapsed = time.time() - cycle_start
+                sleep_time = max(0.1, self.config.fast_loop_interval - elapsed)
+                await asyncio.sleep(sleep_time)
+                
+            except Exception as e:
+                print(f"[FAST-LOOP] Error: {e}")
+                import traceback
+                traceback.print_exc()
+                await asyncio.sleep(1.0)
+        
+        print(f"[FAST-LOOP] Loop ended ({cycle_count} cycles, {self.stats['fast_action_count']} actions)")
 
     async def _autonomous_play_sequential(self, duration_seconds: int, start_time: float):
         """
@@ -2154,7 +2324,18 @@ QUICK DECISION - Choose ONE action from available list:"""
         print(f"  Action success rate: {success_rate:.1%}")
         print(f"  Successful actions: {self.stats['action_success_count']}")
         print(f"  Failed actions: {self.stats['action_failure_count']}")
-        
+
+        # Fast reactive loop stats
+        if self.stats['fast_action_count'] > 0:
+            print(f"\n⚡ Fast Reactive Loop:")
+            print(f"  Fast actions taken: {self.stats['fast_action_count']}")
+            if self.stats['actions_taken'] > 0:
+                fast_ratio = 100 * self.stats['fast_action_count'] / self.stats['actions_taken']
+                print(f"  Fast action ratio: {fast_ratio:.1f}%")
+            if self.stats['fast_action_times']:
+                avg_fast = sum(self.stats['fast_action_times']) / len(self.stats['fast_action_times'])
+                print(f"  Avg fast action time: {avg_fast:.3f}s")
+
         # Planning method breakdown
         total_planning = self.stats['rl_action_count'] + self.stats['llm_action_count'] + self.stats['heuristic_action_count']
         if total_planning > 0:

@@ -635,17 +635,18 @@ class SkyrimAGI:
                 perception = await self.perception.perceive()
                 
                 # Enhance perception with Qwen3-VL using CLIP data (not raw images)
-                # Debug: Check if Qwen3-VL is available
-                if cycle_count % 2 == 0:
-                    if not self.perception_llm:
-                        print(f"[QWEN3-VL] Cycle {cycle_count}: perception_llm is None - not initialized")
-                
                 if self.perception_llm and cycle_count % 2 == 0:  # Every 2nd cycle for faster analysis
+                    print(f"[QWEN3-VL] Cycle {cycle_count}: Starting CLIP-based analysis...")
                     try:
+                        print(f"[QWEN3-VL] DEBUG: Extracting perception data...")
                         game_state = perception.get('game_state')
+                        print(f"[QWEN3-VL] DEBUG: game_state type: {type(game_state)}")
                         scene_type = perception.get('scene_type', 'unknown')
+                        print(f"[QWEN3-VL] DEBUG: scene_type: {scene_type}")
                         objects = perception.get('objects', [])
+                        print(f"[QWEN3-VL] DEBUG: objects count: {len(objects)}")
                         scene_probs = perception.get('scene_probs', {})
+                        print(f"[QWEN3-VL] DEBUG: scene_probs: {scene_probs}")
                         
                         # Build rich context from CLIP analysis
                         objects_list = ', '.join([f"{obj['label']} ({obj['confidence']:.2f})" for obj in objects[:5]])
@@ -671,13 +672,21 @@ Based on this visual and contextual data, provide:
 4. Strategic considerations"""
                         
                         print(f"[QWEN3-VL] Analyzing CLIP perception (cycle {cycle_count})...")
-                        visual_analysis = await self.perception_llm.generate(
-                            prompt=clip_context,
-                            max_tokens=256
-                        )
-                        perception['visual_analysis'] = visual_analysis.get('content', '')
-                        if cycle_count % 15 == 0:  # Log occasionally
-                            print(f"[QWEN3-VL] Analysis: {visual_analysis.get('content', '')[:100]}...")
+                        try:
+                            # Add timeout to prevent hanging
+                            visual_analysis = await asyncio.wait_for(
+                                self.perception_llm.generate(
+                                    prompt=clip_context,
+                                    max_tokens=256
+                                ),
+                                timeout=10.0  # 10 second timeout
+                            )
+                            perception['visual_analysis'] = visual_analysis.get('content', '')
+                            # Log every Qwen3-VL analysis (since it only runs every 2nd cycle anyway)
+                            print(f"[QWEN3-VL] Analysis: {visual_analysis.get('content', '')[:150]}...")
+                        except asyncio.TimeoutError:
+                            print(f"[QWEN3-VL] Analysis timed out after 10s")
+                            perception['visual_analysis'] = "[TIMEOUT] Visual analysis timed out"
                         
                     except Exception as e:
                         # Log errors but don't break the loop

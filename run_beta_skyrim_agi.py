@@ -153,7 +153,7 @@ async def main():
         cycle_interval=cycle_interval,
         
         # LLM settings
-        use_llm=use_llm,
+        use_hybrid_llm=use_llm,  # Use hybrid LLM architecture
         use_gpt5_orchestrator=use_gpt5,
         gpt5_verbose=True,
         

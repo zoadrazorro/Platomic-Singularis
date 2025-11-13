@@ -985,15 +985,17 @@ class SkyrimAGI:
                 local_moe_config = LocalMoEConfig(
                     num_experts=4,
                     expert_model="microsoft/phi-4-mini-reasoning",  # Use phi-4-mini instances 1-4
-                    synthesizer_model="microsoft/phi-4:5",  # Use phi-4:5 for synthesis
+                    synthesizer_model="microsoft/phi-4-mini-reasoning",  # Use phi-4-mini for synthesis (fast, reliable)
+                    fallback_synthesizer="mistralai/mistral-nemo-instruct-2407",  # Fallback if phi-4 fails
                     base_url="http://localhost:1234/v1",
-                    timeout=120,
-                    max_tokens=512
+                    timeout=25,  # Increased for better reliability
+                    synthesis_timeout=15,
+                    max_tokens=1024
                 )
                 
                 self.local_moe = LocalMoEOrchestrator(local_moe_config)
                 await self.local_moe.initialize()
-                print("[PARALLEL] ✓ Local MoE fallback ready (4x Phi-4-mini + Phi-4:5 synthesizer)")
+                print("[PARALLEL] ✓ Local MoE fallback ready (4x Phi-4-mini + Phi-4-mini synthesizer + Mistral fallback)")
             except Exception as e:
                 print(f"[PARALLEL] ⚠️ Local MoE initialization failed: {e}")
                 self.local_moe = None
@@ -6129,6 +6131,16 @@ QUICK DECISION - Choose ONE action from available list:"""
             gemini_detections = self.stats.get('gemini_stuck_detections', 0)
             if gemini_detections > 0:
                 print(f"  Gemini stuck detections: {gemini_detections}")
+        
+        # Local MoE cache stats
+        if hasattr(self, 'local_moe') and self.local_moe and hasattr(self.local_moe, 'cache'):
+            cache_stats = self.local_moe.cache.stats()
+            print(f"\n💾 Local LLM Response Cache:")
+            print(f"  Cache size: {cache_stats['size']}/{cache_stats['max_size']}")
+            print(f"  Hit rate: {cache_stats['hit_rate']:.1f}%")
+            print(f"  Total hits: {cache_stats['hits']}")
+            print(f"  Total misses: {cache_stats['misses']}")
+            print(f"  TTL: {cache_stats['ttl_seconds']}s")
         
         # Stuck detection stats
         failsafe_detections = self.stats.get('failsafe_stuck_detections', 0)

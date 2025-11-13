@@ -339,6 +339,84 @@ class RuleEngine:
             confidence=confidence
         ))
     
+    def is_context_appropriate(self, action: str, context: Dict[str, Any]) -> bool:
+        """
+        Check if an action is appropriate for the current context.
+        
+        Prevents inappropriate actions like:
+        - Combat actions in menus/dialogues
+        - Healing in inventory (potion use requires exiting menu first)
+        - Movement in dialogue scenes
+        - Interaction with objects during combat
+        
+        Args:
+            action: The action to check
+            context: Current game state and scene context
+            
+        Returns:
+            True if action is appropriate, False otherwise
+        """
+        scene_type = context.get('scene_classification') or context.get('visual_scene_type', '')
+        in_combat = context.get('in_combat', False)
+        in_menu = 'inventory' in str(scene_type).lower() or 'map' in str(scene_type).lower()
+        in_dialogue = 'dialogue' in str(scene_type).lower()
+        
+        # Combat actions inappropriate in menus/dialogues
+        combat_actions = ['attack', 'power_attack', 'block', 'bash', 'shout', 'cast_spell']
+        if action in combat_actions and (in_menu or in_dialogue):
+            return False
+        
+        # Healing/potion use inappropriate in menus (need to exit first)
+        healing_actions = ['heal', 'use_potion', 'drink_potion', 'restore_health']
+        if action in healing_actions and in_menu:
+            return False
+        
+        # Movement inappropriate in dialogue
+        movement_actions = ['move_forward', 'move_backward', 'strafe_left', 'strafe_right', 'sprint']
+        if action in movement_actions and in_dialogue:
+            return False
+        
+        # Interaction with objects inappropriate during combat
+        interaction_actions = ['activate', 'take', 'open_container', 'read_book']
+        if action in interaction_actions and in_combat:
+            return False
+        
+        # Stealth actions inappropriate in menus/dialogues
+        stealth_actions = ['sneak', 'pickpocket', 'lockpick']
+        if action in stealth_actions and (in_menu or in_dialogue):
+            return False
+        
+        return True
+    
+    def filter_recommendations_by_context(self, context: Dict[str, Any]):
+        """
+        Filter recommendations to remove context-inappropriate actions.
+        
+        This should be called after evaluate() and before get_top_recommendation().
+        
+        Args:
+            context: Current game state and scene context
+        """
+        original_count = len(self.recommendations)
+        filtered = []
+        removed = []
+        
+        for rec in self.recommendations:
+            if self.is_context_appropriate(rec.action, context):
+                filtered.append(rec)
+            else:
+                removed.append(rec)
+        
+        if removed:
+            print(f"\n[RULES] Context filtering removed {len(removed)} inappropriate recommendations:")
+            for rec in removed:
+                scene = context.get('scene_classification', 'unknown')
+                print(f"  ✗ {rec.action} (priority: {rec.priority.name})")
+                print(f"    Reason: Inappropriate for scene '{scene}'")
+        
+        self.recommendations = filtered
+        return len(removed)
+    
     def block_action(self, action: str, duration: int, reason: str):
         """Block an action for N cycles."""
         self.blocked_actions[action] = ActionBlock(

@@ -2,8 +2,11 @@
 Mixture of Experts (MoE) Orchestrator for Singularis
 
 Implements a parallel MoE architecture with:
-- 6x Gemini Flash 2.0 experts (vision, perception, spatial reasoning)
-- 3x Claude Sonnet 4 experts (strategic planning, tactical reasoning, world modeling)
+- 2x Gemini Flash 2.0 experts (vision, perception, spatial reasoning)
+- 1x Claude Sonnet 4 expert (strategic planning, tactical reasoning, world modeling)
+- 1x GPT-4o expert (integration synthesis, cross-domain reasoning)
+- 1x NVIDIA Nemotron Nano 12B VL expert (visual awareness)
+- 1x Qwen3-235B expert (meta-meta cognition)
 
 Each expert specializes in different aspects of cognition, and their outputs
 are combined through consensus mechanisms aligned with Singularis consciousness.
@@ -28,6 +31,8 @@ from loguru import logger
 
 from .gemini_client import GeminiClient
 from .claude_client import ClaudeClient
+from .openai_client import OpenAIClient
+from .hyperbolic_client import HyperbolicClient
 
 
 class ExpertRole(Enum):
@@ -44,13 +49,20 @@ class ExpertRole(Enum):
     STRATEGIC_PLANNER = "strategic_planner"  # Long-term planning
     TACTICAL_EXECUTOR = "tactical_executor"  # Immediate action decisions
     WORLD_MODELER = "world_modeler"          # Causal reasoning and prediction
+    
+    # OpenAI GPT-4o expert (integration-focused)
+    INTEGRATION_SYNTHESIZER = "integration_synthesizer"  # Cross-domain synthesis
+    
+    # Hyperbolic experts (advanced reasoning)
+    VISUAL_AWARENESS = "visual_awareness"  # NVIDIA Nemotron vision
+    META_COGNITION = "meta_cognition"  # Qwen3 meta-reasoning
 
 
 @dataclass
 class ExpertConfig:
     """Configuration for a single expert."""
     role: ExpertRole
-    model_type: str  # "gemini" or "claude"
+    model_type: str  # "gemini", "claude", "openai", or "hyperbolic"
     model_name: str
     temperature: float = 0.7
     max_tokens: int = 1024
@@ -104,7 +116,7 @@ class MoEOrchestrator:
     """
     Mixture of Experts orchestrator using Singularis consciousness principles.
     
-    Coordinates 6 Gemini + 3 Claude experts in parallel, combining their
+    Coordinates 2 Gemini + 1 Claude + 1 GPT-4o + 2 Hyperbolic experts in parallel, combining their
     outputs through coherence-based consensus mechanisms.
     
     Rate Limiting:
@@ -112,42 +124,70 @@ class MoEOrchestrator:
     - Gemini 2.0 Flash: 10 RPM, 4 million TPM
     - Claude Sonnet 4: Tier-dependent (default: 50 RPM for Tier 1)
     
-    With 6 Gemini experts, we limit to ~1.5 RPM per expert = 9 RPM total (safe margin)
+    With 2 Gemini experts, we limit to ~5 RPM per expert = 10 RPM total (safe margin)
     With 3 Claude experts, we limit to ~15 RPM per expert = 45 RPM total (safe margin)
     """
     
     def __init__(
         self,
-        num_gemini_experts: int = 6,
-        num_claude_experts: int = 3,
+        num_gemini_experts: int = 2,  # Reduced from 6 (60% reduction)
+        num_claude_experts: int = 1,  # Reduced from 3 (60% reduction)
+        num_openai_experts: int = 1,  # GPT-4o expert for integration synthesis
+        num_hyperbolic_vision_experts: int = 1,  # NVIDIA Nemotron for visual awareness
+        num_hyperbolic_reasoning_experts: int = 1,  # Qwen3-235B for meta-cognition
         gemini_model: str = "gemini-2.5-flash",
         claude_model: str = "claude-sonnet-4-5-20250929",
+        openai_model: str = "gpt-4o",
+        hyperbolic_vision_model: str = "nvidia/NVIDIA-Nemotron-Nano-12B-v2-VL-BF16",
+        hyperbolic_reasoning_model: str = "Qwen/Qwen3-235B-A22B-Instruct-2507",
         # Rate limits (requests per minute)
         gemini_rpm_limit: int = 10,  # Conservative limit for Gemini 2.0 Flash
         claude_rpm_limit: int = 50,  # Conservative limit for Claude (Tier 1+)
+        openai_rpm_limit: int = 500,  # GPT-4o has higher limits
+        hyperbolic_rpm_limit: int = 100,  # Hyperbolic rate limit
         # Token limits (tokens per minute)
         gemini_tpm_limit: int = 4_000_000,  # Gemini 2.0 Flash limit
         claude_tpm_limit: int = 40_000,  # Claude Sonnet 4 Tier 1 limit
+        openai_tpm_limit: int = 30_000,  # GPT-4o TPM limit
+        hyperbolic_tpm_limit: int = 50_000,  # Hyperbolic TPM limit
     ):
         """Initialize MoE orchestrator with rate limiting."""
         self.num_gemini_experts = num_gemini_experts
         self.num_claude_experts = num_claude_experts
+        self.num_openai_experts = num_openai_experts
+        self.num_hyperbolic_vision_experts = num_hyperbolic_vision_experts
+        self.num_hyperbolic_reasoning_experts = num_hyperbolic_reasoning_experts
         self.gemini_model = gemini_model
         self.claude_model = claude_model
+        self.openai_model = openai_model
+        self.hyperbolic_vision_model = hyperbolic_vision_model
+        self.hyperbolic_reasoning_model = hyperbolic_reasoning_model
         
         # Rate limits
         self.gemini_rpm_limit = gemini_rpm_limit
         self.claude_rpm_limit = claude_rpm_limit
+        self.openai_rpm_limit = openai_rpm_limit
+        self.hyperbolic_rpm_limit = hyperbolic_rpm_limit
         self.gemini_tpm_limit = gemini_tpm_limit
         self.claude_tpm_limit = claude_tpm_limit
+        self.openai_tpm_limit = openai_tpm_limit
+        self.hyperbolic_tpm_limit = hyperbolic_tpm_limit
         
         # Per-expert rate limits (divide total by number of experts)
         self.gemini_per_expert_rpm = max(1, gemini_rpm_limit // num_gemini_experts)
         self.claude_per_expert_rpm = max(1, claude_rpm_limit // num_claude_experts)
+        self.openai_per_expert_rpm = max(1, openai_rpm_limit // num_openai_experts)
+        total_hyperbolic = num_hyperbolic_vision_experts + num_hyperbolic_reasoning_experts
+        self.hyperbolic_per_expert_rpm = max(1, hyperbolic_rpm_limit // max(1, total_hyperbolic))
         
         # Expert pools
         self.gemini_experts: List[GeminiClient] = []
+        # Expert pools
+        self.gemini_experts: List[GeminiClient] = []
         self.claude_experts: List[ClaudeClient] = []
+        self.openai_experts: List = []  # Will be OpenAIClient instances
+        self.hyperbolic_vision_experts: List = []  # Will be HyperbolicClient instances
+        self.hyperbolic_reasoning_experts: List = []  # Will be HyperbolicClient instances
         
         # Expert configurations
         self.expert_configs: Dict[ExpertRole, ExpertConfig] = {}
@@ -155,18 +195,26 @@ class MoEOrchestrator:
         # Rate limiting tracking
         self.gemini_request_times: deque = deque(maxlen=gemini_rpm_limit)
         self.claude_request_times: deque = deque(maxlen=claude_rpm_limit)
+        self.openai_request_times: deque = deque(maxlen=openai_rpm_limit)
+        self.hyperbolic_request_times: deque = deque(maxlen=hyperbolic_rpm_limit)
         self.gemini_tokens_used: deque = deque(maxlen=100)  # Track recent token usage
         self.claude_tokens_used: deque = deque(maxlen=100)
+        self.openai_tokens_used: deque = deque(maxlen=100)
+        self.hyperbolic_tokens_used: deque = deque(maxlen=100)
         
         # Rate limit locks
         self.gemini_rate_lock = asyncio.Lock()
         self.claude_rate_lock = asyncio.Lock()
+        self.openai_rate_lock = asyncio.Lock()
+        self.hyperbolic_rate_lock = asyncio.Lock()
         
         # Statistics
         self.stats = {
             'total_queries': 0,
             'gemini_calls': 0,
             'claude_calls': 0,
+            'openai_calls': 0,
+            'hyperbolic_calls': 0,
             'avg_coherence': 0.0,
             'avg_confidence': 0.0,
             'avg_response_time': 0.0,
@@ -175,24 +223,35 @@ class MoEOrchestrator:
             'rate_limit_waits': 0,
             'gemini_tokens_total': 0,
             'claude_tokens_total': 0,
+            'openai_tokens_total': 0,
+            'hyperbolic_tokens_total': 0,
         }
         
         # Concurrency control (limit simultaneous requests)
         # Use smaller value to avoid overwhelming APIs
         self.max_concurrent_gemini = min(3, num_gemini_experts)  # Max 3 Gemini at once
         self.max_concurrent_claude = min(2, num_claude_experts)  # Max 2 Claude at once
+        self.max_concurrent_openai = min(2, num_openai_experts)  # Max 2 OpenAI at once
+        total_hyperbolic = num_hyperbolic_vision_experts + num_hyperbolic_reasoning_experts
+        self.max_concurrent_hyperbolic = min(2, total_hyperbolic)  # Max 2 Hyperbolic at once
         self.gemini_semaphore = asyncio.Semaphore(self.max_concurrent_gemini)
         self.claude_semaphore = asyncio.Semaphore(self.max_concurrent_claude)
+        self.openai_semaphore = asyncio.Semaphore(self.max_concurrent_openai)
+        self.hyperbolic_semaphore = asyncio.Semaphore(self.max_concurrent_hyperbolic)
         
         logger.info(
-            f"MoE Orchestrator initialized: {num_gemini_experts} Gemini + {num_claude_experts} Claude experts"
+            f"MoE Orchestrator initialized: {num_gemini_experts} Gemini + {num_claude_experts} Claude + "
+            f"{num_openai_experts} GPT-4o + {num_hyperbolic_vision_experts} Nemotron + {num_hyperbolic_reasoning_experts} Qwen3 experts"
         )
         logger.info(
             f"Rate limits: Gemini {gemini_rpm_limit} RPM ({self.gemini_per_expert_rpm}/expert), "
-            f"Claude {claude_rpm_limit} RPM ({self.claude_per_expert_rpm}/expert)"
+            f"Claude {claude_rpm_limit} RPM ({self.claude_per_expert_rpm}/expert), "
+            f"OpenAI {openai_rpm_limit} RPM ({self.openai_per_expert_rpm}/expert), "
+            f"Hyperbolic {hyperbolic_rpm_limit} RPM ({self.hyperbolic_per_expert_rpm}/expert)"
         )
         logger.info(
-            f"Concurrency: Max {self.max_concurrent_gemini} Gemini + {self.max_concurrent_claude} Claude simultaneous"
+            f"Concurrency: Max {self.max_concurrent_gemini} Gemini + {self.max_concurrent_claude} Claude + "
+            f"{self.max_concurrent_openai} OpenAI + {self.max_concurrent_hyperbolic} Hyperbolic simultaneous"
         )
     
     async def initialize(self):
@@ -258,7 +317,86 @@ class MoEOrchestrator:
             else:
                 logger.warning(f"Claude expert {i+1} unavailable (missing ANTHROPIC_API_KEY)")
         
-        total_experts = len(self.gemini_experts) + len(self.claude_experts)
+        # Initialize OpenAI GPT-4o experts
+        openai_roles = [
+            ExpertRole.INTEGRATION_SYNTHESIZER,
+        ]
+        
+        for i in range(self.num_openai_experts):
+            client = OpenAIClient(model=self.openai_model)
+            if client.is_available():
+                self.openai_experts.append(client)
+                
+                # Assign role
+                role = openai_roles[i % len(openai_roles)]
+                self.expert_configs[role] = ExpertConfig(
+                    role=role,
+                    model_type="openai",
+                    model_name=self.openai_model,
+                    temperature=0.7 + (i * 0.1),  # Vary temperature for diversity
+                    max_tokens=4096,  # GPT-4o can handle longer outputs
+                    specialization_prompt=self._get_specialization_prompt(role),
+                    weight=1.3  # GPT-4o gets higher weight for integration
+                )
+                
+                logger.info(f"✓ OpenAI GPT-4o Expert {i+1}: {role.value}")
+            else:
+                logger.warning(f"OpenAI expert {i+1} unavailable (missing OPENAI_API_KEY)")
+        
+        # Initialize Hyperbolic NVIDIA Nemotron vision experts
+        hyperbolic_vision_roles = [
+            ExpertRole.VISUAL_AWARENESS,
+        ]
+        
+        for i in range(self.num_hyperbolic_vision_experts):
+            client = HyperbolicClient(model=self.hyperbolic_vision_model)
+            if client.is_available():
+                self.hyperbolic_vision_experts.append(client)
+                
+                # Assign role
+                role = hyperbolic_vision_roles[i % len(hyperbolic_vision_roles)]
+                self.expert_configs[role] = ExpertConfig(
+                    role=role,
+                    model_type="hyperbolic",
+                    model_name=self.hyperbolic_vision_model,
+                    temperature=0.5 + (i * 0.1),  # Vary temperature for diversity
+                    max_tokens=2048,  # Nemotron vision model
+                    specialization_prompt=self._get_specialization_prompt(role),
+                    weight=1.2  # Higher weight for advanced vision
+                )
+                
+                logger.info(f"✓ Hyperbolic Nemotron Vision Expert {i+1}: {role.value}")
+            else:
+                logger.warning(f"Hyperbolic vision expert {i+1} unavailable (missing HYPERBOLIC_API_KEY)")
+        
+        # Initialize Hyperbolic Qwen3 reasoning experts
+        hyperbolic_reasoning_roles = [
+            ExpertRole.META_COGNITION,
+        ]
+        
+        for i in range(self.num_hyperbolic_reasoning_experts):
+            client = HyperbolicClient(model=self.hyperbolic_reasoning_model)
+            if client.is_available():
+                self.hyperbolic_reasoning_experts.append(client)
+                
+                # Assign role
+                role = hyperbolic_reasoning_roles[i % len(hyperbolic_reasoning_roles)]
+                self.expert_configs[role] = ExpertConfig(
+                    role=role,
+                    model_type="hyperbolic",
+                    model_name=self.hyperbolic_reasoning_model,
+                    temperature=0.8 + (i * 0.1),  # Higher temp for meta-cognition
+                    max_tokens=8192,  # Qwen3-235B can handle very long outputs
+                    specialization_prompt=self._get_specialization_prompt(role),
+                    weight=1.5  # Highest weight for meta-meta cognition
+                )
+                
+                logger.info(f"✓ Hyperbolic Qwen3 Meta-Cognition Expert {i+1}: {role.value}")
+            else:
+                logger.warning(f"Hyperbolic reasoning expert {i+1} unavailable (missing HYPERBOLIC_API_KEY)")
+        
+        total_experts = (len(self.gemini_experts) + len(self.claude_experts) + len(self.openai_experts) + 
+                        len(self.hyperbolic_vision_experts) + len(self.hyperbolic_reasoning_experts))
         logger.info(f"MoE initialization complete: {total_experts} experts ready")
         
         if total_experts == 0:
@@ -303,6 +441,23 @@ class MoEOrchestrator:
             ExpertRole.WORLD_MODELER: (
                 "You are a world modeling expert. Focus on causal relationships, game mechanics, "
                 "NPC behaviors, quest logic, and predicting consequences of actions."
+            ),
+            ExpertRole.INTEGRATION_SYNTHESIZER: (
+                "You are an integration synthesis expert. Focus on combining insights from multiple "
+                "domains (vision, reasoning, strategy) into coherent unified understanding. "
+                "Synthesize cross-domain patterns and resolve contradictions between different perspectives."
+            ),
+            ExpertRole.VISUAL_AWARENESS: (
+                "You are a visual awareness expert using advanced multimodal perception. "
+                "Focus on deep understanding of visual scenes: fine-grained object relationships, "
+                "spatial dynamics, motion patterns, and subtle visual cues that indicate game state. "
+                "Provide rich, contextual visual understanding beyond simple object detection."
+            ),
+            ExpertRole.META_COGNITION: (
+                "You are a meta-meta cognition expert focused on thinking about thinking. "
+                "Analyze the reasoning processes themselves, evaluate decision quality, identify cognitive biases, "
+                "assess confidence levels, and suggest improvements to thought patterns. "
+                "Provide meta-level insights about how the system is reasoning and where it might be wrong."
             ),
         }
         return prompts.get(role, "You are an expert AI assistant.")
@@ -381,6 +536,58 @@ class MoEOrchestrator:
             
             # Record this request
             self.claude_request_times.append(time.time())
+    
+    async def _wait_for_openai_rate_limit(self):
+        """Wait if necessary to respect OpenAI rate limits."""
+        async with self.openai_rate_lock:
+            now = time.time()
+            
+            # Remove requests older than 1 minute
+            while self.openai_request_times and (now - self.openai_request_times[0]) > 60:
+                self.openai_request_times.popleft()
+            
+            # Check if we're at the limit
+            if len(self.openai_request_times) >= self.openai_rpm_limit:
+                # Calculate wait time
+                oldest_request = self.openai_request_times[0]
+                wait_time = 60 - (now - oldest_request) + 0.1  # Add small buffer
+                
+                if wait_time > 0:
+                    logger.warning(
+                        f"OpenAI rate limit reached ({self.openai_rpm_limit} RPM). "
+                        f"Waiting {wait_time:.1f}s..."
+                    )
+                    self.stats['rate_limit_waits'] += 1
+                    await asyncio.sleep(wait_time)
+            
+            # Record this request
+            self.openai_request_times.append(time.time())
+    
+    async def _wait_for_hyperbolic_rate_limit(self):
+        """Wait if necessary to respect Hyperbolic rate limits."""
+        async with self.hyperbolic_rate_lock:
+            now = time.time()
+            
+            # Remove requests older than 1 minute
+            while self.hyperbolic_request_times and (now - self.hyperbolic_request_times[0]) > 60:
+                self.hyperbolic_request_times.popleft()
+            
+            # Check if we're at the limit
+            if len(self.hyperbolic_request_times) >= self.hyperbolic_rpm_limit:
+                # Calculate wait time
+                oldest_request = self.hyperbolic_request_times[0]
+                wait_time = 60 - (now - oldest_request) + 0.1  # Add small buffer
+                
+                if wait_time > 0:
+                    logger.warning(
+                        f"Hyperbolic rate limit reached ({self.hyperbolic_rpm_limit} RPM). "
+                        f"Waiting {wait_time:.1f}s..."
+                    )
+                    self.stats['rate_limit_waits'] += 1
+                    await asyncio.sleep(wait_time)
+            
+            # Record this request
+            self.hyperbolic_request_times.append(time.time())
     
     def _check_token_limit(self, provider: str, tokens: int) -> bool:
         """

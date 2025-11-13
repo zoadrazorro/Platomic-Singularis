@@ -498,21 +498,25 @@ class HybridLLMClient:
         max_tokens: int = 4096
     ) -> str:
         """
-        Generate world model reasoning using GPT-5-thinking.
+        Generate unified consciousness narrative using GPT-5-thinking.
         
-        This model specializes in:
-        - Causal reasoning and counterfactual thinking
-        - Long-term consequence prediction
-        - Complex system dynamics understanding
+        This model integrates ALL perspectives into coherent self-referential experience:
+        - Sensorimotor embodiment (what the body feels)
+        - Perceptual awareness (what the eyes see)
+        - Cognitive reasoning (what the mind thinks)
+        - Meta-cognition (thinking about thinking)
+        - Motor intentionality (why actions are chosen)
+        
+        Creates first-person narrative that unifies fragmented expert perspectives.
         
         Args:
-            prompt: World modeling prompt
-            system_prompt: Optional system prompt
-            temperature: Sampling temperature (higher for exploration)
-            max_tokens: Maximum output tokens
+            prompt: Integration prompt with all perspectives
+            system_prompt: System prompt defining consciousness role
+            temperature: Sampling temperature (higher for creative synthesis)
+            max_tokens: Maximum output tokens (longer for rich narrative)
             
         Returns:
-            World model analysis
+            Unified consciousness narrative
         """
         start_time = time.time()
         

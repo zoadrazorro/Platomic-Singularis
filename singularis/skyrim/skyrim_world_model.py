@@ -7,18 +7,183 @@ Extends the base world model with Skyrim-specific knowledge:
 3. Quest mechanics and dependencies
 4. Combat and magic systems
 5. Geography and location knowledge
+6. Symbolic logic reasoning (first-order logic predicates and inference)
 
 Design principles:
 - Causal learning enables prediction and planning
 - Understanding game mechanics improves decision-making
 - World model grounds actions in game reality
+- Symbolic logic allows formal reasoning about game rules
 """
 
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple, Any, Set
 from dataclasses import dataclass
 import numpy as np
+from enum import Enum
 
 from ..world_model import CausalGraph, CausalEdge
+
+
+@dataclass
+class LogicPredicate:
+    """A first-order logic predicate with arguments."""
+    name: str  # e.g., "IsHostile", "HasItem", "InLocation"
+    args: Tuple[str, ...]  # Arguments (constants or variables)
+    truth_value: bool = True  # True or False
+    
+    def __str__(self):
+        neg = "¬" if not self.truth_value else ""
+        return f"{neg}{self.name}({', '.join(self.args)})"
+    
+    def __hash__(self):
+        return hash((self.name, self.args, self.truth_value))
+    
+    def __eq__(self, other):
+        return (self.name == other.name and 
+                self.args == other.args and 
+                self.truth_value == other.truth_value)
+
+
+@dataclass
+class LogicRule:
+    """A logic inference rule: premises → conclusion."""
+    premises: List[LogicPredicate]
+    conclusion: LogicPredicate
+    confidence: float = 1.0  # How certain we are about this rule
+    
+    def __str__(self):
+        prem_str = " ∧ ".join(str(p) for p in self.premises)
+        return f"{prem_str} → {self.conclusion} (confidence={self.confidence:.2f})"
+
+
+class LogicEngine:
+    """
+    Symbolic logic reasoning engine for formal inference.
+    
+    Uses first-order logic to reason about game state and rules.
+    """
+    
+    def __init__(self):
+        """Initialize logic engine."""
+        self.facts: Set[LogicPredicate] = set()  # Known facts
+        self.rules: List[LogicRule] = []  # Inference rules
+        
+    def add_fact(self, fact: LogicPredicate):
+        """Add a fact to the knowledge base."""
+        self.facts.add(fact)
+    
+    def remove_fact(self, fact: LogicPredicate):
+        """Remove a fact from the knowledge base."""
+        self.facts.discard(fact)
+    
+    def add_rule(self, rule: LogicRule):
+        """Add an inference rule."""
+        self.rules.append(rule)
+    
+    def query(self, predicate: LogicPredicate) -> bool:
+        """
+        Query whether a predicate is true.
+        
+        Args:
+            predicate: Predicate to query
+            
+        Returns:
+            True if predicate can be proven from facts
+        """
+        # Direct fact check
+        if predicate in self.facts:
+            return True
+        
+        # Try to infer from rules
+        return self._can_infer(predicate)
+    
+    def _can_infer(self, goal: LogicPredicate, depth: int = 0, max_depth: int = 5) -> bool:
+        """
+        Attempt to infer a goal using backward chaining.
+        
+        Args:
+            goal: Goal predicate to prove
+            depth: Current recursion depth
+            max_depth: Maximum recursion depth
+            
+        Returns:
+            True if goal can be inferred
+        """
+        if depth > max_depth:
+            return False
+        
+        # Check each rule
+        for rule in self.rules:
+            # If this rule concludes our goal
+            if self._unify(rule.conclusion, goal):
+                # Check if all premises are satisfied
+                all_premises_true = True
+                for premise in rule.premises:
+                    # Direct fact check
+                    if premise not in self.facts:
+                        # Try to infer premise recursively
+                        if not self._can_infer(premise, depth + 1, max_depth):
+                            all_premises_true = False
+                            break
+                
+                if all_premises_true:
+                    return True
+        
+        return False
+    
+    def _unify(self, pred1: LogicPredicate, pred2: LogicPredicate) -> bool:
+        """
+        Simple unification check (exact match for now).
+        
+        Args:
+            pred1: First predicate
+            pred2: Second predicate
+            
+        Returns:
+            True if predicates unify
+        """
+        return (pred1.name == pred2.name and 
+                pred1.args == pred2.args and
+                pred1.truth_value == pred2.truth_value)
+    
+    def forward_chain(self) -> Set[LogicPredicate]:
+        """
+        Apply forward chaining to derive new facts.
+        
+        Returns:
+            Set of newly derived facts
+        """
+        new_facts = set()
+        changed = True
+        
+        while changed:
+            changed = False
+            for rule in self.rules:
+                # Check if all premises are in facts
+                all_premises_satisfied = all(p in self.facts for p in rule.premises)
+                
+                if all_premises_satisfied and rule.conclusion not in self.facts:
+                    # Derive new fact
+                    self.facts.add(rule.conclusion)
+                    new_facts.add(rule.conclusion)
+                    changed = True
+        
+        return new_facts
+    
+    def get_stats(self) -> Dict[str, Any]:
+        """Get logic engine statistics."""
+        return {
+            'facts': len(self.facts),
+            'rules': len(self.rules),
+            'predicates_by_type': self._count_predicates_by_type()
+        }
+    
+    def _count_predicates_by_type(self) -> Dict[str, int]:
+        """Count facts by predicate type."""
+        counts = {}
+        for fact in self.facts:
+            counts[fact.name] = counts.get(fact.name, 0) + 1
+        return counts
 
 
 @dataclass
@@ -78,9 +243,13 @@ class SkyrimWorldModel:
         # Action effectiveness by layer (learned)
         self.action_effectiveness: Dict[str, Dict[str, float]] = {}
 
+        # Symbolic logic engine for formal reasoning
+        self.logic_engine = LogicEngine()
+
         # Initialize common Skyrim causal relationships
         self._initialize_skyrim_causality()
         self._initialize_layer_knowledge()
+        self._initialize_skyrim_logic_rules()
 
     def _initialize_skyrim_causality(self):
         """Initialize known Skyrim causal relationships."""
@@ -174,6 +343,120 @@ class SkyrimWorldModel:
         
         print("[OK] Initialized layer knowledge base")
 
+    def _initialize_skyrim_logic_rules(self):
+        """Initialize Skyrim-specific symbolic logic rules."""
+        
+        # Rule: If NPC is hostile AND in combat, then should defend
+        self.logic_engine.add_rule(LogicRule(
+            premises=[
+                LogicPredicate("IsHostile", ("NPC",), True),
+                LogicPredicate("InCombat", ("Player",), True)
+            ],
+            conclusion=LogicPredicate("ShouldDefend", ("Player",), True),
+            confidence=0.95
+        ))
+        
+        # Rule: If has bounty AND in city, then guards are hostile
+        self.logic_engine.add_rule(LogicRule(
+            premises=[
+                LogicPredicate("HasBounty", ("Player",), True),
+                LogicPredicate("InCity", ("Player",), True)
+            ],
+            conclusion=LogicPredicate("IsHostile", ("Guards",), True),
+            confidence=0.99
+        ))
+        
+        # Rule: If health is low AND not in combat, then should heal
+        self.logic_engine.add_rule(LogicRule(
+            premises=[
+                LogicPredicate("HealthLow", ("Player",), True),
+                LogicPredicate("InCombat", ("Player",), False)
+            ],
+            conclusion=LogicPredicate("ShouldHeal", ("Player",), True),
+            confidence=0.90
+        ))
+        
+        # Rule: If health is critical, then should heal (even in combat)
+        self.logic_engine.add_rule(LogicRule(
+            premises=[
+                LogicPredicate("HealthCritical", ("Player",), True)
+            ],
+            conclusion=LogicPredicate("ShouldHeal", ("Player",), True),
+            confidence=0.98
+        ))
+        
+        # Rule: If NPC is friend AND needs help, then should assist
+        self.logic_engine.add_rule(LogicRule(
+            premises=[
+                LogicPredicate("IsFriend", ("NPC",), True),
+                LogicPredicate("NeedsHelp", ("NPC",), True)
+            ],
+            conclusion=LogicPredicate("ShouldAssist", ("Player", "NPC"), True),
+            confidence=0.85
+        ))
+        
+        # Rule: If location is unexplored AND safe, then should explore
+        self.logic_engine.add_rule(LogicRule(
+            premises=[
+                LogicPredicate("IsUnexplored", ("Location",), True),
+                LogicPredicate("IsSafe", ("Location",), True)
+            ],
+            conclusion=LogicPredicate("ShouldExplore", ("Location",), True),
+            confidence=0.80
+        ))
+        
+        # Rule: If in stealth AND enemy nearby, then avoid detection
+        self.logic_engine.add_rule(LogicRule(
+            premises=[
+                LogicPredicate("InStealth", ("Player",), True),
+                LogicPredicate("EnemyNearby", ("Player",), True)
+            ],
+            conclusion=LogicPredicate("ShouldAvoidDetection", ("Player",), True),
+            confidence=0.92
+        ))
+        
+        # Rule: If has quest item AND quest active, then should deliver
+        self.logic_engine.add_rule(LogicRule(
+            premises=[
+                LogicPredicate("HasQuestItem", ("Player", "Item"), True),
+                LogicPredicate("QuestActive", ("Quest",), True)
+            ],
+            conclusion=LogicPredicate("ShouldDeliverItem", ("Player", "Item"), True),
+            confidence=0.88
+        ))
+        
+        # Rule: If outnumbered AND has escape route, then should retreat
+        self.logic_engine.add_rule(LogicRule(
+            premises=[
+                LogicPredicate("Outnumbered", ("Player",), True),
+                LogicPredicate("HasEscapeRoute", ("Player",), True)
+            ],
+            conclusion=LogicPredicate("ShouldRetreat", ("Player",), True),
+            confidence=0.75
+        ))
+        
+        # Rule: If magic available AND enemy weak to magic, then use magic
+        self.logic_engine.add_rule(LogicRule(
+            premises=[
+                LogicPredicate("HasMagicka", ("Player",), True),
+                LogicPredicate("WeakToMagic", ("Enemy",), True)
+            ],
+            conclusion=LogicPredicate("ShouldUseMagic", ("Player",), True),
+            confidence=0.85
+        ))
+        
+        # Rule: If dragon nearby AND unprepared, then should prepare
+        self.logic_engine.add_rule(LogicRule(
+            premises=[
+                LogicPredicate("DragonNearby", ("Player",), True),
+                LogicPredicate("Unprepared", ("Player",), True)
+            ],
+            conclusion=LogicPredicate("ShouldPrepare", ("Player",), True),
+            confidence=0.95
+        ))
+        
+        print("[OK] Initialized Skyrim symbolic logic rules")
+
     def learn_from_experience(
         self,
         action: str,
@@ -227,6 +510,9 @@ class SkyrimWorldModel:
                 after_state,
                 surprise
             )
+        
+        # Learn symbolic logic rules from surprising outcomes
+        self._learn_logic_rules_from_experience(action, before_state, after_state, surprise)
 
     def _learn_layer_effectiveness(
         self,
@@ -280,6 +566,99 @@ class SkyrimWorldModel:
         # Keep only recent contexts (last 20)
         if len(stats['contexts']) > 20:
             stats['contexts'] = stats['contexts'][-20:]
+
+    def _learn_logic_rules_from_experience(
+        self,
+        action: str,
+        before_state: Dict[str, Any],
+        after_state: Dict[str, Any],
+        surprise: float
+    ):
+        """
+        Learn new symbolic logic rules from surprising experiences.
+        
+        Args:
+            action: Action that was taken
+            before_state: State before action
+            after_state: State after action
+            surprise: How surprising the outcome was
+        """
+        # Only learn from moderately to highly surprising outcomes
+        if surprise < 0.4:
+            return
+        
+        # Extract key state changes
+        changes = self._identify_changes(before_state, after_state)
+        
+        # Try to create logical rules from patterns
+        for change_key, change_val in changes.items():
+            # Example: If we attacked and unexpectedly became hostile with town
+            if 'attack' in action.lower() and 'town_hostility' in change_key:
+                # Check what we attacked
+                target = before_state.get('target', 'Unknown')
+                
+                # Create a rule: Attacking {target} → Town hostility
+                premises = [
+                    LogicPredicate("PerformAction", (action,), True),
+                    LogicPredicate("Target", (target,), True)
+                ]
+                conclusion = LogicPredicate("TownHostile", ("Player",), True)
+                
+                # Check if rule already exists
+                rule_exists = any(
+                    r.conclusion == conclusion and set(r.premises) == set(premises)
+                    for r in self.logic_engine.rules
+                )
+                
+                if not rule_exists:
+                    new_rule = LogicRule(
+                        premises=premises,
+                        conclusion=conclusion,
+                        confidence=0.6  # Start with moderate confidence
+                    )
+                    self.logic_engine.add_rule(new_rule)
+                    print(f"[LOGIC] Learned new rule: {new_rule}")
+            
+            # Example: If we stole and guards became hostile
+            elif 'steal' in action.lower() and 'guards_hostile' in change_key:
+                premises = [
+                    LogicPredicate("PerformAction", ("steal",), True),
+                    LogicPredicate("InCity", ("Player",), True)
+                ]
+                conclusion = LogicPredicate("IsHostile", ("Guards",), True)
+                
+                # Update confidence if rule exists, or add new rule
+                existing_rule = None
+                for rule in self.logic_engine.rules:
+                    if rule.conclusion == conclusion and set(rule.premises) == set(premises):
+                        existing_rule = rule
+                        break
+                
+                if existing_rule:
+                    # Increase confidence based on repeated observation
+                    existing_rule.confidence = min(0.99, existing_rule.confidence + 0.05)
+                    print(f"[LOGIC] Updated rule confidence: {existing_rule}")
+                else:
+                    new_rule = LogicRule(premises=premises, conclusion=conclusion, confidence=0.7)
+                    self.logic_engine.add_rule(new_rule)
+                    print(f"[LOGIC] Learned new rule: {new_rule}")
+            
+            # Learn health-related rules
+            elif 'health' in change_key and change_val < -20:  # Significant health loss
+                # If we lost health while in combat
+                if before_state.get('in_combat', False):
+                    enemy_type = before_state.get('enemy_type', 'Unknown')
+                    premises = [
+                        LogicPredicate("InCombat", ("Player",), True),
+                        LogicPredicate("FacingEnemy", (enemy_type,), True)
+                    ]
+                    conclusion = LogicPredicate("HighDamageRisk", ("Player",), True)
+                    
+                    new_rule = LogicRule(premises=premises, conclusion=conclusion, confidence=0.75)
+                    # Only add if not exists
+                    if not any(r.conclusion == conclusion for r in self.logic_engine.rules):
+                        self.logic_engine.add_rule(new_rule)
+                        print(f"[LOGIC] Learned combat risk rule: {new_rule}")
 
     def suggest_optimal_layer(
         self,
@@ -452,35 +831,220 @@ class SkyrimWorldModel:
                     changes[key] = 1.0  # Binary change
         return changes
 
+    def update_logic_facts_from_state(self, game_state: Dict[str, Any]):
+        """
+        Update symbolic logic facts based on current game state.
+        
+        Args:
+            game_state: Current game state dictionary
+        """
+        # Clear old temporal facts (keep persistent knowledge)
+        # We'll selectively remove and re-add based on current state
+        
+        # Health status
+        health = game_state.get('health', 100)
+        if health < 30:
+            self.logic_engine.add_fact(LogicPredicate("HealthCritical", ("Player",), True))
+            self.logic_engine.remove_fact(LogicPredicate("HealthLow", ("Player",), True))
+        elif health < 50:
+            self.logic_engine.add_fact(LogicPredicate("HealthLow", ("Player",), True))
+            self.logic_engine.remove_fact(LogicPredicate("HealthCritical", ("Player",), True))
+        else:
+            self.logic_engine.remove_fact(LogicPredicate("HealthLow", ("Player",), True))
+            self.logic_engine.remove_fact(LogicPredicate("HealthCritical", ("Player",), True))
+        
+        # Combat status
+        in_combat = game_state.get('in_combat', False)
+        if in_combat:
+            self.logic_engine.add_fact(LogicPredicate("InCombat", ("Player",), True))
+        else:
+            self.logic_engine.remove_fact(LogicPredicate("InCombat", ("Player",), True))
+        
+        # Stealth status
+        is_sneaking = game_state.get('is_sneaking', False)
+        if is_sneaking:
+            self.logic_engine.add_fact(LogicPredicate("InStealth", ("Player",), True))
+        else:
+            self.logic_engine.remove_fact(LogicPredicate("InStealth", ("Player",), True))
+        
+        # Bounty status
+        bounty = game_state.get('bounty', 0)
+        if bounty > 0:
+            self.logic_engine.add_fact(LogicPredicate("HasBounty", ("Player",), True))
+        else:
+            self.logic_engine.remove_fact(LogicPredicate("HasBounty", ("Player",), True))
+        
+        # Location status
+        location = game_state.get('location', '')
+        if location:
+            # Check if in a city
+            cities = ['Whiterun', 'Solitude', 'Riften', 'Windhelm', 'Markarth']
+            if any(city in location for city in cities):
+                self.logic_engine.add_fact(LogicPredicate("InCity", ("Player",), True))
+            else:
+                self.logic_engine.remove_fact(LogicPredicate("InCity", ("Player",), True))
+        
+        # Enemy status
+        enemies_nearby = game_state.get('enemies_nearby', 0)
+        if enemies_nearby > 0:
+            self.logic_engine.add_fact(LogicPredicate("EnemyNearby", ("Player",), True))
+            if enemies_nearby >= 3:
+                self.logic_engine.add_fact(LogicPredicate("Outnumbered", ("Player",), True))
+            else:
+                self.logic_engine.remove_fact(LogicPredicate("Outnumbered", ("Player",), True))
+        else:
+            self.logic_engine.remove_fact(LogicPredicate("EnemyNearby", ("Player",), True))
+            self.logic_engine.remove_fact(LogicPredicate("Outnumbered", ("Player",), True))
+        
+        # Magicka status
+        magicka = game_state.get('magicka', 100)
+        if magicka > 30:
+            self.logic_engine.add_fact(LogicPredicate("HasMagicka", ("Player",), True))
+        else:
+            self.logic_engine.remove_fact(LogicPredicate("HasMagicka", ("Player",), True))
+        
+        # NPC hostility (from relationship tracking)
+        for npc_name, relationship in self.npc_relationships.items():
+            if relationship.relationship_value < -0.3:
+                self.logic_engine.add_fact(LogicPredicate("IsHostile", (npc_name,), True))
+                self.logic_engine.remove_fact(LogicPredicate("IsFriend", (npc_name,), True))
+            elif relationship.relationship_value > 0.3:
+                self.logic_engine.add_fact(LogicPredicate("IsFriend", (npc_name,), True))
+                self.logic_engine.remove_fact(LogicPredicate("IsHostile", (npc_name,), True))
+
+    def query_logic_recommendation(self, game_state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Query the logic engine for strategic recommendations.
+        
+        Args:
+            game_state: Current game state
+            
+        Returns:
+            Dictionary with logical inferences and recommendations
+        """
+        # Update facts first
+        self.update_logic_facts_from_state(game_state)
+        
+        # Apply forward chaining to derive new facts
+        new_facts = self.logic_engine.forward_chain()
+        
+        # Extract recommendations
+        recommendations = {
+            'should_defend': False,
+            'should_heal': False,
+            'should_retreat': False,
+            'should_explore': False,
+            'should_use_magic': False,
+            'should_avoid_detection': False,
+            'logical_reasoning': [],
+            'derived_facts': len(new_facts)
+        }
+        
+        # Check various action recommendations
+        if self.logic_engine.query(LogicPredicate("ShouldDefend", ("Player",), True)):
+            recommendations['should_defend'] = True
+            recommendations['logical_reasoning'].append("Defense recommended: Hostile NPCs in combat")
+        
+        if self.logic_engine.query(LogicPredicate("ShouldHeal", ("Player",), True)):
+            recommendations['should_heal'] = True
+            recommendations['logical_reasoning'].append("Healing recommended: Health is low")
+        
+        if self.logic_engine.query(LogicPredicate("ShouldRetreat", ("Player",), True)):
+            recommendations['should_retreat'] = True
+            recommendations['logical_reasoning'].append("Retreat recommended: Outnumbered with escape route")
+        
+        if self.logic_engine.query(LogicPredicate("ShouldUseMagic", ("Player",), True)):
+            recommendations['should_use_magic'] = True
+            recommendations['logical_reasoning'].append("Magic recommended: Enemy weak to magic")
+        
+        if self.logic_engine.query(LogicPredicate("ShouldAvoidDetection", ("Player",), True)):
+            recommendations['should_avoid_detection'] = True
+            recommendations['logical_reasoning'].append("Stealth recommended: In stealth with enemy nearby")
+        
+        return recommendations
+
+    def get_logic_explanation(self, predicate: LogicPredicate) -> List[str]:
+        """
+        Get explanation for why a predicate is true based on rules.
+        
+        Args:
+            predicate: Predicate to explain
+            
+        Returns:
+            List of explanation strings
+        """
+        explanations = []
+        
+        # Check if directly in facts
+        if predicate in self.logic_engine.facts:
+            explanations.append(f"{predicate} is directly known")
+            return explanations
+        
+        # Check which rules could derive this
+        for rule in self.logic_engine.rules:
+            if self._unify_predicates(rule.conclusion, predicate):
+                # Check if premises are satisfied
+                all_satisfied = all(p in self.logic_engine.facts for p in rule.premises)
+                if all_satisfied:
+                    prem_str = " AND ".join(str(p) for p in rule.premises)
+                    explanations.append(
+                        f"{predicate} follows from: {prem_str} "
+                        f"(confidence: {rule.confidence:.2f})"
+                    )
+        
+        return explanations if explanations else ["No logical derivation found"]
+
+    def _unify_predicates(self, pred1: LogicPredicate, pred2: LogicPredicate) -> bool:
+        """Check if two predicates unify."""
+        return (pred1.name == pred2.name and 
+                pred1.args == pred2.args and
+                pred1.truth_value == pred2.truth_value)
+
     def predict_outcome(
         self,
         action: str,
         current_state: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Predict outcome of action.
+        Predict outcome of action using both causal graph and symbolic logic.
 
         Args:
             action: Proposed action
             current_state: Current state
 
         Returns:
-            Predicted next state
+            Predicted next state with logical inferences
         """
         predicted_state = current_state.copy()
 
-        # Find causal edges from this action
-        edges = self.causal_graph.get_outgoing_edges(action)
-
-        for edge in edges:
-            # Apply causal effect
-            if edge.effect in predicted_state:
-                if isinstance(predicted_state[edge.effect], (int, float)):
-                    # Modify numerical value
-                    predicted_state[edge.effect] += edge.strength
+        # 1. Causal prediction (probabilistic)
+        # Check if action node exists and get its effects
+        if action in self.causal_graph.nodes:
+            action_node = self.causal_graph.nodes[action]
+            # Iterate through children (effects) of this action
+            for effect_var in action_node.children:
+                strength = action_node.causal_strengths.get(effect_var, 1.0)
+                # Apply causal effect
+                if effect_var in predicted_state:
+                    if isinstance(predicted_state[effect_var], (int, float)):
+                        # Modify numerical value
+                        predicted_state[effect_var] += strength
+                    else:
+                        # Binary change
+                        predicted_state[effect_var] = True
                 else:
-                    # Binary change
-                    predicted_state[edge.effect] = True
+                    # Add new effect variable
+                    predicted_state[effect_var] = strength
+        
+        # 2. Symbolic logic prediction (formal inference)
+        logic_recommendations = self.query_logic_recommendation(predicted_state)
+        predicted_state['logic_recommendations'] = logic_recommendations
+        
+        # 3. Combine insights
+        if logic_recommendations.get('should_retreat') and action == 'attack':
+            predicted_state['warning'] = "Logic suggests retreat, but action is attack"
+        elif logic_recommendations.get('should_heal') and action != 'use_potion':
+            predicted_state['warning'] = "Logic suggests healing"
 
         return predicted_state
 
@@ -621,7 +1185,9 @@ class SkyrimWorldModel:
         }
 
     def get_stats(self) -> Dict[str, Any]:
-        """Get world model statistics."""
+        """Get world model statistics including symbolic logic."""
+        logic_stats = self.logic_engine.get_stats()
+        
         return {
             'causal_edges': len(self.causal_graph.graph.edges()),
             'npc_relationships': len(self.npc_relationships),
@@ -629,7 +1195,63 @@ class SkyrimWorldModel:
             'locations_explored': sum(1 for loc in self.locations.values() if loc['explored']),
             'active_quests': len(self.get_active_quests()),
             'learned_rules': len(self.learned_rules),
+            'logic_facts': logic_stats['facts'],
+            'logic_rules': logic_stats['rules'],
+            'logic_predicates_by_type': logic_stats['predicates_by_type'],
         }
+
+    def get_logic_analysis(self, game_state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Get comprehensive logical analysis of current situation.
+        
+        Args:
+            game_state: Current game state
+            
+        Returns:
+            Dictionary with logical analysis, recommendations, and explanations
+        """
+        # Update facts and get recommendations
+        recommendations = self.query_logic_recommendation(game_state)
+        
+        # Get all current facts
+        current_facts = [str(fact) for fact in self.logic_engine.facts]
+        
+        # Get high-confidence rules that are applicable
+        applicable_rules = []
+        for rule in self.logic_engine.rules:
+            if rule.confidence > 0.8:
+                all_premises_true = all(p in self.logic_engine.facts for p in rule.premises)
+                if all_premises_true:
+                    applicable_rules.append(str(rule))
+        
+        # Get explanations for key recommendations
+        explanations = {}
+        if recommendations['should_defend']:
+            explanations['defend'] = self.get_logic_explanation(
+                LogicPredicate("ShouldDefend", ("Player",), True)
+            )
+        if recommendations['should_heal']:
+            explanations['heal'] = self.get_logic_explanation(
+                LogicPredicate("ShouldHeal", ("Player",), True)
+            )
+        if recommendations['should_retreat']:
+            explanations['retreat'] = self.get_logic_explanation(
+                LogicPredicate("ShouldRetreat", ("Player",), True)
+            )
+        
+        return {
+            'recommendations': recommendations,
+            'current_facts': current_facts[:20],  # Limit to prevent overflow
+            'applicable_rules': applicable_rules[:10],
+            'explanations': explanations,
+            'logic_confidence': self._compute_average_rule_confidence()
+        }
+    
+    def _compute_average_rule_confidence(self) -> float:
+        """Compute average confidence across all rules."""
+        if not self.logic_engine.rules:
+            return 0.0
+        return sum(r.confidence for r in self.logic_engine.rules) / len(self.logic_engine.rules)
 
 
     def learn_terrain_feature(
@@ -763,7 +1385,9 @@ class SkyrimWorldModel:
 
 # Example usage
 if __name__ == "__main__":
-    print("Testing Skyrim World Model...")
+    print("=" * 70)
+    print("Testing Skyrim World Model with Symbolic Logic")
+    print("=" * 70)
 
     wm = SkyrimWorldModel()
 
@@ -775,22 +1399,74 @@ if __name__ == "__main__":
     print(f"   Action: steal_item")
     print(f"   Predicted: {predicted}")
 
-    # 2. Test learning from experience
-    print("\n2. Testing learning from experience...")
-    before = {'health': 100, 'in_combat': False}
-    after = {'health': 80, 'in_combat': True}
-    wm.learn_from_experience('attack_dragon', before, after, surprise_threshold=0.2)
-    print(f"   Learned: attack_dragon has consequences!")
+    # 2. Test symbolic logic recommendations
+    print("\n2. Testing symbolic logic recommendations...")
+    
+    # Scenario: Low health in combat
+    combat_state = {
+        'health': 25,
+        'in_combat': True,
+        'enemies_nearby': 2,
+        'magicka': 50,
+        'location': 'Bleak Falls Barrow'
+    }
+    print(f"   Scenario: {combat_state}")
+    recommendations = wm.query_logic_recommendation(combat_state)
+    print(f"   Recommendations:")
+    for reason in recommendations['logical_reasoning']:
+        print(f"      • {reason}")
+    
+    # 3. Test logic explanation
+    print("\n3. Testing logic explanation...")
+    should_heal = LogicPredicate("ShouldHeal", ("Player",), True)
+    explanations = wm.get_logic_explanation(should_heal)
+    print(f"   Why should heal?")
+    for exp in explanations:
+        print(f"      • {exp}")
 
-    # 3. Test NPC relationships
-    print("\n3. Testing NPC relationships...")
-    wm.update_npc_relationship('Lydia', 'Whiterun', delta=0.2)
-    wm.update_npc_relationship('Ulfric', 'Stormcloaks', delta=-0.5)
-    print(f"   Lydia: {wm.get_npc_relationship('Lydia').relationship_value:.2f}")
-    print(f"   Ulfric: {wm.get_npc_relationship('Ulfric').relationship_value:.2f}")
+    # 4. Test learning from experience
+    print("\n4. Testing learning from surprising experience...")
+    before = {
+        'health': 100, 
+        'in_combat': False,
+        'target': 'chicken',
+        'town_hostility': False
+    }
+    after = {
+        'health': 100, 
+        'in_combat': True,
+        'target': 'chicken',
+        'town_hostility': True
+    }
+    print(f"   Action: attack_chicken")
+    wm.learn_from_experience('attack_chicken', before, after, surprise_threshold=0.2)
 
-    # 4. Test moral evaluation
-    print("\n4. Testing moral evaluation...")
+    # 5. Test NPC relationships
+    print("\n5. Testing NPC relationships...")
+    wm.update_npc_relationship('Lydia', 'Whiterun', delta=0.5)
+    wm.update_npc_relationship('Bandit Chief', 'Bandits', delta=-0.8)
+    print(f"   Lydia: {wm.get_npc_relationship('Lydia').relationship_value:.2f} (friend)")
+    print(f"   Bandit: {wm.get_npc_relationship('Bandit Chief').relationship_value:.2f} (hostile)")
+
+    # 6. Test comprehensive logic analysis
+    print("\n6. Testing comprehensive logic analysis...")
+    analysis_state = {
+        'health': 30,
+        'in_combat': True,
+        'enemies_nearby': 4,
+        'magicka': 80,
+        'bounty': 100,
+        'location': 'Whiterun',
+        'is_sneaking': False
+    }
+    analysis = wm.get_logic_analysis(analysis_state)
+    print(f"   Current situation: Critical health, outnumbered in Whiterun with bounty")
+    print(f"   Logic confidence: {analysis['logic_confidence']:.2f}")
+    print(f"   Active facts: {len(analysis['current_facts'])} facts in knowledge base")
+    print(f"   Applicable rules: {len(analysis['applicable_rules'])} high-confidence rules apply")
+
+    # 7. Test moral evaluation
+    print("\n7. Testing moral evaluation...")
     eval_help = wm.evaluate_moral_choice(
         "Help the wounded traveler",
         {'relationship': +0.1}
@@ -803,7 +1479,18 @@ if __name__ == "__main__":
     )
     print(f"   Steal: {eval_steal['outcome_status']} (impact={eval_steal['impact_score']:.2f})")
 
-    # Stats
-    print(f"\n5. Stats: {wm.get_stats()}")
+    # 8. Display final stats
+    print("\n8. Final world model statistics:")
+    stats = wm.get_stats()
+    for key, value in stats.items():
+        if isinstance(value, dict):
+            print(f"   {key}:")
+            for k, v in value.items():
+                print(f"      {k}: {v}")
+        else:
+            print(f"   {key}: {value}")
 
-    print("\n✓ World model tests complete")
+    print("\n" + "=" * 70)
+    print("✓ World model tests complete - Symbolic logic fully integrated!")
+    print("=" * 70)
+

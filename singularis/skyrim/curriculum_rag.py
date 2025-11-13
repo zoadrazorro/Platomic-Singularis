@@ -382,6 +382,60 @@ class CurriculumRAG:
         
         return excerpt.strip()
     
+    def get_random_academic_thought(self) -> Optional[KnowledgeRetrieval]:
+        """
+        Retrieve a random academic thought using Brownian motion through knowledge space.
+        
+        Simulates spontaneous memory recall - like a random thought popping into consciousness.
+        Uses Brownian motion to wander through the knowledge graph naturally.
+        
+        Returns:
+            Random knowledge retrieval, or None if no documents available
+        """
+        if not self.document_chunks:
+            return None
+        
+        import random
+        import numpy as np
+        
+        # Brownian motion parameters
+        # Start from a random position in knowledge space
+        current_pos = random.randint(0, len(self.document_chunks) - 1)
+        
+        # Random walk for 3-7 steps (Brownian motion)
+        walk_steps = random.randint(3, 7)
+        
+        for _ in range(walk_steps):
+            # Brownian step: normally distributed random walk
+            # σ controls diffusion rate (how far we can jump)
+            step_size = int(np.random.normal(0, len(self.document_chunks) * 0.1))
+            current_pos = (current_pos + step_size) % len(self.document_chunks)
+        
+        # Retrieve the document we landed on
+        doc, chunk, chunk_idx = self.document_chunks[current_pos]
+        
+        # Create a natural-sounding excerpt (first ~200 chars of chunk)
+        excerpt = chunk[:200].strip()
+        if len(chunk) > 200:
+            # Try to end at sentence boundary
+            last_period = excerpt.rfind('.')
+            if last_period > 100:
+                excerpt = excerpt[:last_period + 1]
+            else:
+                excerpt = excerpt + "..."
+        
+        # Assign a random "relevance" score (represents how vivid the memory is)
+        # Some random thoughts are clearer than others
+        vividness = random.uniform(0.3, 0.8)
+        
+        logger.debug(f"[BROWNIAN-THOUGHT] Random academic thought from {doc.category}: {doc.title}")
+        
+        return KnowledgeRetrieval(
+            document=doc,
+            relevance_score=vividness,
+            excerpt=excerpt
+        )
+    
     def get_stats(self) -> Dict[str, Any]:
         """Get RAG statistics."""
         return {

@@ -170,7 +170,7 @@ async def main():
         
         # Voice system - Can enable with unlimited models if needed
         enable_voice=use_voice,  # Voice uses Gemini TTS (check rate limits)
-        voice_type="NOVA",
+        voice_type="CHARON",  # Deep, authoritative voice
         voice_min_priority="MEDIUM",  # Changed from HIGH to hear more decisions
         
         # Video interpreter - Can enable with unlimited models if needed

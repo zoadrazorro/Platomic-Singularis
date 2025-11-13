@@ -263,6 +263,8 @@ class VirtualXboxController:
     
     async def tap_button(self, button: XboxButton, duration: float = 0.1):
         """Tap a button (press and release)."""
+        if not self.dry_run:
+            print(f"[VGAMEPAD] Tapping {button.value} button")
         self.press_button(button)
         await asyncio.sleep(duration)
         self.release_button(button)

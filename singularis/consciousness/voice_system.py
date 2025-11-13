@@ -18,11 +18,15 @@ import aiohttp
 from loguru import logger
 
 try:
-    import pygame
+    import pygame_ce as pygame
     PYGAME_AVAILABLE = True
 except ImportError:
-    PYGAME_AVAILABLE = False
-    logger.warning("pygame not installed - voice system will be silent")
+    try:
+        import pygame
+        PYGAME_AVAILABLE = True
+    except ImportError:
+        PYGAME_AVAILABLE = False
+        logger.warning("pygame not installed - voice system will be silent")
 
 
 class VoiceType(Enum):

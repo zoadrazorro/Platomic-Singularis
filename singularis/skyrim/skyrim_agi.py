@@ -525,7 +525,7 @@ class SkyrimAGI:
         )
         
         if self.curriculum_rag:
-            self.consciousness.add_node(
+            self.consciousness_monitor.register_node(
                 "curriculum_rag", "knowledge", weight=1.2,
                 metadata={'description': 'Academic knowledge from university curriculum'}
             )

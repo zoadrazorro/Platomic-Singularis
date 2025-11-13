@@ -391,8 +391,18 @@ class SkyrimAGI:
             'fast_action_count': 0,  # Fast reactive actions
             'planning_times': [],  # Track planning duration
             'execution_times': [],  # Track execution duration
-            'fast_action_times': []  # Track fast action execution
+            'fast_action_times': [],  # Track fast action execution
+            # Action source tracking (which system provided the action)
+            'action_source_moe': 0,  # MoE consensus
+            'action_source_hybrid': 0,  # Hybrid LLM
+            'action_source_phi4': 0,  # Phi-4 planner
+            'action_source_local_moe': 0,  # Local MoE
+            'action_source_heuristic': 0,  # Heuristic fallback
+            'action_source_timeout': 0,  # Timeout fallback
         }
+        
+        # Last successful action source (for caching fast path)
+        self.last_action_source: Optional[str] = None
 
         # Set up controller reference in perception for layer awareness
         self.perception.set_controller(self.controller)
@@ -4279,6 +4289,10 @@ Format: ACTION: <action_name>"""
                                             if action and action in available_actions:
                                                 print(f"[GEMINI-MOE] ✓ Won the race! {len(self.moe.gemini_experts)} experts chose: {action}")
                                                 
+                                                # Track action source
+                                                self.stats['action_source_moe'] += 1
+                                                self.last_action_source = 'moe'
+                                                
                                                 # Hebbian: Record successful Gemini MoE activation
                                                 self.hebbian.record_activation(
                                                     system_name='gemini_moe',
@@ -4308,6 +4322,10 @@ Format: ACTION: <action_name>"""
                                         print(f"[LOCAL-MOE] ✓ Won the race! Using: {action}")
                                         self.local_moe_failures = 0  # Reset on success
                                         
+                                        # Track action source
+                                        self.stats['action_source_local_moe'] += 1
+                                        self.last_action_source = 'local_moe'
+                                        
                                         # Hebbian: Record successful local MoE activation
                                         self.hebbian.record_activation(
                                             system_name='local_moe',
@@ -4335,6 +4353,10 @@ Format: ACTION: <action_name>"""
                                         print(f"[PHI4] ✓ Won the race! Using: {llm_action}")
                                         self.stats['llm_action_count'] += 1
                                         
+                                        # Track action source
+                                        self.stats['action_source_phi4'] += 1
+                                        self.last_action_source = 'phi4'
+                                        
                                         # Hebbian: Record successful Phi-4 activation
                                         self.hebbian.record_activation(
                                             system_name='phi4_planner',
@@ -4351,10 +4373,14 @@ Format: ACTION: <action_name>"""
                             # Timeout - cancel pending tasks and use heuristic
                             if pending:
                                 print(f"[PARALLEL] ⏱️ Timeout after 10s, using heuristic (cancelled {len(pending)} pending tasks)")
+                                self.stats['action_source_timeout'] += 1
+                                self.last_action_source = 'timeout'
                                 for task in pending:
                                     task.cancel()
                         except asyncio.TimeoutError:
                             print(f"[PARALLEL] ⏱️ Timeout after 10s, using heuristic")
+                            self.stats['action_source_timeout'] += 1
+                            self.last_action_source = 'timeout'
                             for task in tasks_to_race:
                                 task.cancel()
                     else:
@@ -4363,6 +4389,8 @@ Format: ACTION: <action_name>"""
                         if llm_action:
                             print(f"[PHI4] Final action: {llm_action}")
                             self.stats['llm_action_count'] += 1
+                            self.stats['action_source_phi4'] += 1
+                            self.last_action_source = 'phi4'
                             return llm_action
                         else:
                             print("[PHI4] Phi-4 returned None, falling back to heuristics")
@@ -4375,6 +4403,8 @@ Format: ACTION: <action_name>"""
             
             # Track heuristic usage
             self.stats['heuristic_action_count'] += 1
+            self.stats['action_source_heuristic'] += 1
+            self.last_action_source = 'heuristic'
             
             # Check for stuck condition - all systems failing
             if (self.cloud_llm_failures >= self.max_consecutive_failures and 
@@ -5118,6 +5148,26 @@ QUICK DECISION - Choose ONE action from available list:"""
             print(f"  RL-based: {self.stats['rl_action_count']} ({100*self.stats['rl_action_count']/total_planning:.1f}%)")
             print(f"  LLM-based: {self.stats['llm_action_count']} ({100*self.stats['llm_action_count']/total_planning:.1f}%)")
             print(f"  Heuristic: {self.stats['heuristic_action_count']} ({100*self.stats['heuristic_action_count']/total_planning:.1f}%)")
+        
+        # Action source breakdown (which system provided actions)
+        total_actions = sum([
+            self.stats.get('action_source_moe', 0),
+            self.stats.get('action_source_hybrid', 0),
+            self.stats.get('action_source_phi4', 0),
+            self.stats.get('action_source_local_moe', 0),
+            self.stats.get('action_source_heuristic', 0),
+            self.stats.get('action_source_timeout', 0),
+        ])
+        if total_actions > 0:
+            print(f"\n🎯 Action Sources (who provided the action):")
+            print(f"  Gemini MoE: {self.stats.get('action_source_moe', 0)} ({100*self.stats.get('action_source_moe', 0)/total_actions:.1f}%)")
+            print(f"  Hybrid LLM: {self.stats.get('action_source_hybrid', 0)} ({100*self.stats.get('action_source_hybrid', 0)/total_actions:.1f}%)")
+            print(f"  Phi-4 Planner: {self.stats.get('action_source_phi4', 0)} ({100*self.stats.get('action_source_phi4', 0)/total_actions:.1f}%)")
+            print(f"  Local MoE: {self.stats.get('action_source_local_moe', 0)} ({100*self.stats.get('action_source_local_moe', 0)/total_actions:.1f}%)")
+            print(f"  Heuristic: {self.stats.get('action_source_heuristic', 0)} ({100*self.stats.get('action_source_heuristic', 0)/total_actions:.1f}%)")
+            print(f"  Timeout: {self.stats.get('action_source_timeout', 0)} ({100*self.stats.get('action_source_timeout', 0)/total_actions:.1f}%)")
+            if self.last_action_source:
+                print(f"  Last successful: {self.last_action_source}")
         
         # Timing metrics
         if self.stats['planning_times']:

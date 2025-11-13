@@ -264,22 +264,66 @@ class UnifiedConsciousnessLayer:
         context = context or {}
 
         logger.info(f"[GPT-5 Consciousness] Processing query: {query[:100]}...")
+        
+        # ==== ADDED VISIBILITY: Log orchestrator inputs ====
+        print("\n" + "=" * 80)
+        print("🧠 SINGULARIS ORCHESTRATOR (GPT-5 Unified Consciousness)")
+        print("=" * 80)
+        print(f"\n📥 INPUT QUERY:")
+        print(f"   {query[:200]}{'...' if len(query) > 200 else ''}")
+        
+        print(f"\n📊 SUBSYSTEM INPUTS:")
+        for subsystem, data in subsystem_inputs.items():
+            data_preview = str(data)[:150]
+            print(f"   • {subsystem}: {data_preview}{'...' if len(str(data)) > 150 else ''}")
+        
+        if context:
+            print(f"\n🔍 CONTEXT:")
+            for key, value in context.items():
+                print(f"   • {key}: {value}")
+        print()
 
         # Step 1: GPT-5 analyzes all subsystem inputs and determines delegation strategy
+        print("[ORCHESTRATOR] Step 1: GPT-5 coordination analysis...")
         gpt5_analysis = await self._gpt5_coordinate(query, subsystem_inputs, context)
+        
+        # ==== ADDED VISIBILITY: Log GPT-5 analysis ====
+        print(f"\n💡 GPT-5 COORDINATION ANALYSIS:")
+        print(f"   {gpt5_analysis[:400]}{'...' if len(gpt5_analysis) > 400 else ''}")
 
         # Step 2: Delegate to appropriate nano experts in parallel
+        print("\n[ORCHESTRATOR] Step 2: Delegating to nano experts...")
         nano_responses = await self._delegate_to_nano_experts(
             query, subsystem_inputs, gpt5_analysis, context
         )
+        
+        # ==== ADDED VISIBILITY: Log nano expert delegation ====
+        print(f"\n🤖 NANO EXPERT DELEGATION:")
+        print(f"   Activated {len(nano_responses)} experts:")
+        for role, response in nano_responses.items():
+            status = "✓" if response.content else "✗"
+            print(f"   {status} {role.value}: {response.execution_time:.2f}s, {len(response.content)} chars")
+            # Show first part of each expert's response
+            if response.content:
+                preview = response.content[:150].replace('\n', ' ')
+                print(f"      → {preview}...")
 
         # Step 3: Synthesizer expert integrates all outputs
+        print("\n[ORCHESTRATOR] Step 3: Synthesizing expert outputs...")
         final_synthesis = await self._synthesize_responses(
             query, gpt5_analysis, nano_responses, subsystem_inputs
         )
+        
+        # ==== ADDED VISIBILITY: Log synthesis ====
+        print(f"\n🔗 FINAL SYNTHESIS:")
+        print(f"   {final_synthesis[:300]}{'...' if len(final_synthesis) > 300 else ''}")
 
         # Step 4: Compute coherence score
         coherence_score = self._compute_coherence(nano_responses, subsystem_inputs)
+        
+        # ==== ADDED VISIBILITY: Log coherence ====
+        print(f"\n📈 SYSTEM COHERENCE:")
+        print(f"   Coherence Score: {coherence_score:.3f}")
 
         # Extract subsystem insights
         subsystem_insights = {
@@ -288,6 +332,13 @@ class UnifiedConsciousnessLayer:
             'memory_insights': nano_responses[NanoExpertRole.MEMORY_MANAGER].content if NanoExpertRole.MEMORY_MANAGER in nano_responses else "",
             'action_insights': nano_responses[NanoExpertRole.ACTION_PLANNER].content if NanoExpertRole.ACTION_PLANNER in nano_responses else "",
         }
+        
+        # ==== ADDED VISIBILITY: Log key insights ====
+        print(f"\n🔑 KEY INSIGHTS BY SUBSYSTEM:")
+        for subsystem_name, insight in subsystem_insights.items():
+            if insight:
+                insight_preview = insight[:120].replace('\n', ' ')
+                print(f"   • {subsystem_name}: {insight_preview}...")
 
         total_time = time.time() - start_time
 
@@ -309,6 +360,15 @@ class UnifiedConsciousnessLayer:
             f"Coherence: {coherence_score:.2f} | "
             f"Nano experts: {len(nano_responses)}"
         )
+        
+        # ==== ADDED VISIBILITY: Summary stats ====
+        print(f"\n⏱️  ORCHESTRATOR SUMMARY:")
+        print(f"   Total Time: {total_time:.2f}s")
+        print(f"   GPT-5 Calls: 2 (coordination + synthesis)")
+        print(f"   Nano Expert Calls: {len(nano_responses)}")
+        print(f"   System Coherence: {coherence_score:.3f}")
+        print(f"   Avg Coherence (session): {self.stats['avg_coherence']:.3f}")
+        print("=" * 80 + "\n")
 
         return UnifiedConsciousnessResponse(
             response=final_synthesis,
@@ -633,6 +693,33 @@ class UnifiedConsciousnessLayer:
             length_coherence * 0.3 +
             time_coherence * 0.3
         )
+        
+        # ==== ADDED VISIBILITY: Detect conflicts ====
+        # Check for conflicting recommendations by analyzing response content
+        conflicts_detected = []
+        
+        # Look for contradiction keywords in responses
+        contradiction_keywords = ['however', 'but', 'conflict', 'disagree', 'contradict', 'inconsistent']
+        for role, response in nano_responses.items():
+            content_lower = response.content.lower()
+            if any(keyword in content_lower for keyword in contradiction_keywords):
+                conflicts_detected.append(role.value)
+        
+        if conflicts_detected:
+            print(f"\n⚠️  CONFLICTS DETECTED:")
+            print(f"   Experts flagging conflicts: {', '.join(conflicts_detected)}")
+            print(f"   Coherence Impact: -{len(conflicts_detected) * 0.1:.2f}")
+            
+            # Apply conflict penalty
+            coherence = coherence - (len(conflicts_detected) * 0.1)
+        
+        # ==== ADDED VISIBILITY: Coherence breakdown ====
+        print(f"\n📊 COHERENCE BREAKDOWN:")
+        print(f"   Subsystem Coverage: {subsystem_coverage:.3f} (weight: 0.4)")
+        print(f"   Length Coherence: {length_coherence:.3f} (weight: 0.3)")
+        print(f"   Time Coherence: {time_coherence:.3f} (weight: 0.3)")
+        if conflicts_detected:
+            print(f"   Conflict Penalty: -{len(conflicts_detected) * 0.1:.3f}")
 
         return min(max(coherence, 0.0), 1.0)
 

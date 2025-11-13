@@ -475,6 +475,16 @@ class SkyrimAGI:
         self.consciousness_monitor = SystemConsciousnessMonitor(history_size=1000)
         self._register_consciousness_nodes()
         
+        # State coordinator (resolves subsystem conflicts)
+        print("  [13/13] State coordination system...")
+        from .state_coordinator import StateCoordinator
+        self.state_coordinator = StateCoordinator(
+            staleness_threshold=2.0,
+            conflict_history_size=100
+        )
+        print("[STATE-COORD] Epistemic coherence tracking enabled")
+        print("[STATE-COORD] Subsystem state mismatches will be detected and resolved")
+        
         # Stuck detection and recovery (multi-tier failsafe)
         self.stuck_detection_window = 5  # Check last N actions
         self.action_history = []  # Track recent actions
@@ -482,6 +492,15 @@ class SkyrimAGI:
         self.stuck_threshold = 0.02  # Coherence change threshold
         self.consecutive_same_action = 0  # Count same action repeats
         self.last_executed_action = None
+        
+        # STUCK Recovery Tracker (monitors if unstick actions work)
+        from .stuck_recovery_tracker import StuckRecoveryTracker
+        self.stuck_tracker = StuckRecoveryTracker(
+            verification_cycles=3,
+            max_history=100
+        )
+        print("[STUCK-TRACKER] Recovery monitoring enabled")
+        print("[STUCK-TRACKER] Will verify if unstick actions change visual state")
         
         # Action diversity tracking (GPT-4o recommendation)
         self.action_type_counts = {}  # Track frequency of each action type
@@ -2555,6 +2574,20 @@ Based on this visual and contextual data, provide:
                     }
                 )
                 
+                # STATE COORDINATOR: Update from perception subsystem
+                self.state_coordinator.update(
+                    subsystem='perception',
+                    state={
+                        'scene': scene_type.value,
+                        'location': game_state.location_name,
+                        'in_combat': game_state.in_combat,
+                        'in_menu': scene_type in [SceneType.INVENTORY, SceneType.MAP],
+                        'in_dialogue': scene_type == SceneType.DIALOGUE,
+                        'health': game_state.health,
+                    },
+                    confidence=0.95  # Perception is highly reliable
+                )
+                
                 # Fix 6: Integrate menu learner into async mode
                 if scene_type in [SceneType.INVENTORY, SceneType.MAP]:
                     if not self.menu_learner.current_menu:
@@ -2811,6 +2844,29 @@ Local Vision Model Analysis:
                         if thinking:
                             print(f"\n[SENSORIMOTOR] Extended Thinking ({len(thinking)} chars):")
                             print(f"[SENSORIMOTOR] {thinking[:300]}...")
+                        
+                        # STATE COORDINATOR: Update from sensorimotor subsystem
+                        # Extract key facts from analysis
+                        sensorimotor_state = {
+                            'scene': scene_type.value,
+                            'location': game_state.location_name,
+                            'stuck': 'stuck' in analysis.lower() or 'blocked' in analysis.lower(),
+                            'in_combat': 'combat' in analysis.lower() or 'enemy' in analysis.lower(),
+                        }
+                        # Parse visual context
+                        if visual_analysis:
+                            if 'outdoor' in visual_analysis.lower() or 'exterior' in visual_analysis.lower():
+                                sensorimotor_state['environment'] = 'outdoor'
+                            elif 'indoor' in visual_analysis.lower() or 'interior' in visual_analysis.lower():
+                                sensorimotor_state['environment'] = 'indoor'
+                            if 'inventory' in visual_analysis.lower() or 'menu' in visual_analysis.lower():
+                                sensorimotor_state['in_menu'] = True
+                        
+                        self.state_coordinator.update(
+                            subsystem='sensorimotor',
+                            state=sensorimotor_state,
+                            confidence=0.85  # High confidence from visual analysis
+                        )
                         
                         # Store in dedicated RAG memory with visual learning
                         self.memory_rag.store_cognitive_memory(
@@ -4696,6 +4752,22 @@ COHERENCE GAIN: <estimate 0.0-1.0 how much this increases understanding>
             current_layer = game_state.current_action_layer
             available_actions = game_state.available_actions
             
+            # STATE COORDINATOR: Update from action planning subsystem
+            # Action planning has its own view of state (may differ from perception/sensorimotor)
+            self.state_coordinator.update(
+                subsystem='action_planning',
+                state={
+                    'scene': scene_type.value,
+                    'location': game_state.location_name,
+                    'in_combat': game_state.in_combat,
+                    'in_menu': scene_type in [SceneType.INVENTORY, SceneType.MAP],
+                    'in_dialogue': scene_type == SceneType.DIALOGUE,
+                    'health': game_state.health,
+                    'layer': current_layer,
+                },
+                confidence=0.70  # Lower confidence - may use slightly stale state
+            )
+            
             # Filter out blocked actions from rule engine
             if hasattr(self, 'rule_engine'):
                 original_count = len(available_actions)
@@ -4735,6 +4807,12 @@ COHERENCE GAIN: <estimate 0.0-1.0 how much this increases understanding>
             
             # Evaluate rules
             rule_results = self.rule_engine.evaluate(rule_context)
+            
+            # CONTEXT-AWARE FILTERING: Remove inappropriate recommendations
+            removed_count = self.rule_engine.filter_recommendations_by_context(rule_context)
+            if removed_count > 0:
+                # Re-fetch recommendations after filtering
+                rule_results['recommendations'] = self.rule_engine.recommendations
             
             # Display rule firing results
             if rule_results['fired_rules']:
@@ -4805,6 +4883,40 @@ COHERENCE GAIN: <estimate 0.0-1.0 how much this increases understanding>
                 print(f"[EMERGENCY] No emergency conditions detected")
             
             print(f"[PLANNING-CHECKPOINT] Emergency rules: {time.time() - checkpoint_emergency:.3f}s")
+            
+            # COHERENCE-BASED CONFIDENCE ADJUSTMENT
+            # When coherence is low (<0.5), reduce confidence in actions
+            checkpoint_coherence = time.time()
+            current_coherence = self.current_consciousness.coherence if self.current_consciousness else 0.5
+            base_confidence = emergency_context['action_confidence']
+            
+            from ..confidence_adjustment import adjust_confidence, should_delay_action
+            
+            adjusted_confidence, explanation = adjust_confidence(
+                base_confidence=base_confidence,
+                coherence=current_coherence,
+                coherence_threshold=0.5,
+                dampening_strength=0.7
+            )
+            
+            if adjusted_confidence != base_confidence:
+                print(f"\n[CONFIDENCE] {explanation}")
+                emergency_context['action_confidence'] = adjusted_confidence
+                
+                # Check if we should delay action due to very low confidence/coherence
+                should_wait, wait_reason = should_delay_action(
+                    adjusted_confidence=adjusted_confidence,
+                    coherence=current_coherence,
+                    confidence_threshold=0.5
+                )
+                
+                if should_wait:
+                    print(f"[CONFIDENCE] ⚠️ ACTION DELAYED: {wait_reason}")
+                    print(f"[CONFIDENCE] System needs more information before acting")
+                    # Return a safe default action
+                    return 'wait' if 'wait' in available_actions else 'look_around'
+            
+            print(f"[PLANNING-CHECKPOINT] Confidence adjustment: {time.time() - checkpoint_coherence:.3f}s")
 
             # Prepare state dict for RL
             state_dict = game_state.to_dict()
@@ -5505,6 +5617,17 @@ Format: ACTION: <action_name>"""
                 if stuck_status['recovery_action'] and stuck_status['recovery_action'] in available_actions:
                     print(f"[STUCK-{stuck_status['severity'].upper()}] {stuck_status['reason']} → {stuck_status['recovery_action']}")
                     self.consecutive_same_action = 0  # Reset counter
+                    
+                    # STUCK TRACKER: Record recovery attempt
+                    if 'tracker_detection' in stuck_status and len(self.visual_embedding_history) > 0:
+                        import numpy as np
+                        visual_before = np.array(self.visual_embedding_history[-1])
+                        self.stuck_tracker.attempt_recovery(
+                            detection=stuck_status['tracker_detection'],
+                            recovery_action=stuck_status['recovery_action'],
+                            visual_before=visual_before
+                        )
+                    
                     return stuck_status['recovery_action']
                 
                 # Fallback if recommended action not available
@@ -6257,12 +6380,33 @@ QUICK DECISION - Choose ONE action from available list:"""
                     stuck_info['reason'] = f'Visual stuckness: {similarity:.3f} similarity'
                     stuck_info['recovery_action'] = 'turn_around'
                     print(f"[STUCK-LOW] {stuck_info['reason']} → {stuck_info['recovery_action']}")
+                    
+                    # STUCK TRACKER: Record detection
+                    current_coherence = self.current_consciousness.coherence if self.current_consciousness else 0.5
+                    game_state = self.current_perception.get('game_state') if self.current_perception else None
+                    location = game_state.location_name if game_state else "unknown"
+                    
+                    detection = self.stuck_tracker.detect_stuck(
+                        visual_similarity=similarity,
+                        repeated_action=self.last_executed_action or "unknown",
+                        repeat_count=self.consecutive_same_action,
+                        coherence=current_coherence,
+                        location=location
+                    )
+                    
+                    # Store detection for later recovery attempt
+                    stuck_info['tracker_detection'] = detection
+                    
                     return stuck_info
         
         return stuck_info
     
     def _update_stuck_tracking(self, action: str, coherence: float, visual_embedding=None):
         """Update stuck detection tracking."""
+        # STUCK TRACKER: Tick cycle and verify pending recoveries
+        if visual_embedding is not None:
+            self.stuck_tracker.tick_cycle(visual_embedding)
+        
         # Track action history
         self.action_history.append(action)
         if len(self.action_history) > 20:  # Keep last 20 actions
@@ -6362,6 +6506,41 @@ QUICK DECISION - Choose ONE action from available list:"""
             print(f"  Structural ℓₛ: {self.current_consciousness.coherence_structural:.3f}")
             print(f"  Participatory ℓₚ: {self.current_consciousness.coherence_participatory:.3f}")
         
+        # State Coordinator (Epistemic Coherence)
+        if hasattr(self, 'state_coordinator'):
+            coord_stats = self.state_coordinator.get_stats()
+            epistemic_coherence = coord_stats['coherence']
+            conflicts = coord_stats['active_conflicts']
+            
+            print(f"\n🔄 STATE COORDINATION:")
+            print(f"  Epistemic Coherence: {epistemic_coherence:.3f} {'🟢' if epistemic_coherence > 0.7 else '🟡' if epistemic_coherence > 0.4 else '🔴'}")
+            print(f"  Active Conflicts:    {conflicts} {'🟢' if conflicts == 0 else '🟡' if conflicts < 3 else '🔴'}")
+            print(f"  Subsystems Tracked:  {coord_stats['subsystem_count']}")
+            print(f"  Total Conflicts:     {coord_stats['conflicts_detected']}")
+            print(f"  Resolved:            {coord_stats['conflicts_resolved']}")
+            
+            # Show canonical state if available
+            if hasattr(self.state_coordinator, 'canonical_state'):
+                canonical = self.state_coordinator.get_canonical_state()
+                print(f"  Canonical Scene:     {canonical.get('scene', 'unknown')}")
+        
+        # STUCK Recovery Tracker
+        if hasattr(self, 'stuck_tracker'):
+            recovery_stats = self.stuck_tracker.get_stats()
+            success_rate = recovery_stats['success_rate']
+            
+            print(f"\n🚧 STUCK RECOVERY:")
+            print(f"  Total STUCK Detected: {recovery_stats['total_detections']}")
+            print(f"  Recovery Attempts:    {recovery_stats['total_recoveries']}")
+            print(f"  Success Rate:         {success_rate:.1%} {'🟢' if success_rate > 0.6 else '🟡' if success_rate > 0.3 else '🔴'}")
+            print(f"  Successful:           {recovery_stats['successful_recoveries']}")
+            print(f"  Failed:               {recovery_stats['failed_recoveries']}")
+            print(f"  Pending Verification: {recovery_stats['pending_verifications']}")
+            
+            # Show best recovery action if known
+            if recovery_stats['best_recovery_action']:
+                print(f"  Best Recovery Action: {recovery_stats['best_recovery_action']}")
+        
         print(f"{'='*70}\n")
 
     def _update_action_diversity_stats(self, action: str, coherence: float):
@@ -6448,7 +6627,7 @@ QUICK DECISION - Choose ONE action from available list:"""
                 'consciousness': {
                     'coherence': self.current_consciousness.coherence if self.current_consciousness else 0,
                     'phi': self.current_consciousness.consciousness_level if self.current_consciousness else 0,
-                    'nodes_active': len(self.consciousness_monitor.nodes) if hasattr(self, 'consciousness_monitor') and self.consciousness_monitor else 0
+                    'nodes_active': len(self.consciousness_monitor.registered_nodes) if hasattr(self, 'consciousness_monitor') and self.consciousness_monitor and hasattr(self.consciousness_monitor, 'registered_nodes') else 0
                 },
                 
                 # LLM status

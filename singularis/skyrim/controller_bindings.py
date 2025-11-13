@@ -117,7 +117,10 @@ class SkyrimControllerBindings:
             ctrl.set_right_trigger(0.0)
         
         async def open_menu(ctrl, duration=0.0):
+            print("[CONTROLLER] Opening menu with START button...")
             await ctrl.tap_button(XboxButton.START)
+            await asyncio.sleep(0.5)  # Wait for menu to open
+            print("[CONTROLLER] Menu should be open now")
         
         async def wait(ctrl, duration=0.0):
             await ctrl.tap_button(XboxButton.BACK)

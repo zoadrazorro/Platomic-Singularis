@@ -2545,6 +2545,11 @@ Strongest System: {stats['strongest_system']} ({stats['strongest_weight']:.2f})"
                     )
                 
                 # Plan action (with LLM throttling and timeout protection)
+                # Increased timeout to 15s to accommodate slow LLM systems:
+                # - 6 Gemini experts (rate-limited to 1 RPM each = 10s minimum wait)
+                # - 3 Claude experts (3s latency each)
+                # - Hybrid vision+reasoning pipeline (4-6s)
+                # - Local MoE synthesis (5-7s)
                 planning_start = time.time()
                 action = None
                 try:
@@ -2555,10 +2560,10 @@ Strongest System: {stats['strongest_system']} ({stats['strongest_weight']:.2f})"
                                 motivation=mot_state,
                                 goal=self.current_goal
                             ),
-                            timeout=8.0  # Max 8s for planning to prevent hangs
+                            timeout=15.0  # Max 15s for planning to accommodate slow expert systems
                         )
                 except asyncio.TimeoutError:
-                    print("[REASONING] ⚠️ Planning timed out after 8s, using fallback")
+                    print("[REASONING] ⚠️ Planning timed out after 15s, using fallback")
                     action = None
                 except Exception as e:
                     print(f"[REASONING] ⚠️ Planning error: {e}, using fallback")
@@ -3832,6 +3837,9 @@ COHERENCE GAIN: <estimate 0.0-1.0 how much this increases understanding>
             Returns:
                 Action to take
             """
+            checkpoint_start = time.time()
+            print(f"[PLANNING-CHECKPOINT] Starting _plan_action at {checkpoint_start:.3f}")
+            
             game_state = perception['game_state']
             scene_type = perception['scene_type']
             current_layer = game_state.current_action_layer
@@ -3839,11 +3847,16 @@ COHERENCE GAIN: <estimate 0.0-1.0 how much this increases understanding>
 
             print(f"[PLANNING] Current layer: {current_layer}")
             print(f"[PLANNING] Available actions: {available_actions}")
+            print(f"[PLANNING-CHECKPOINT] Game state extraction: {time.time() - checkpoint_start:.3f}s")
 
+            # Check sensorimotor state BEFORE starting expensive LLM operations
+            checkpoint_sensorimotor = time.time()
             override_action = self._sensorimotor_override(available_actions, game_state)
             if override_action:
+                print(f"[PLANNING-CHECKPOINT] Sensorimotor override: {time.time() - checkpoint_sensorimotor:.3f}s (action: {override_action})")
                 self.stats['heuristic_action_count'] += 1
                 return override_action
+            print(f"[PLANNING-CHECKPOINT] Sensorimotor check: {time.time() - checkpoint_sensorimotor:.3f}s")
 
             # Prepare state dict for RL
             state_dict = game_state.to_dict()
@@ -3870,9 +3883,11 @@ COHERENCE GAIN: <estimate 0.0-1.0 how much this increases understanding>
                 print(f"[VARIETY] Forcing variety after {self.consecutive_same_action}x '{self.last_executed_action}' - skipping RL")
             
             # Always get Q-values (needed for heuristics even if skipping RL)
+            checkpoint_rl_start = time.time()
             q_values = {}
             if self.rl_learner is not None:
                 q_values = self.rl_learner.get_q_values(state_dict)
+            print(f"[PLANNING-CHECKPOINT] Q-value computation: {time.time() - checkpoint_rl_start:.3f}s")
             
             # Initialize task variables
             cloud_task = None
@@ -3887,12 +3902,14 @@ COHERENCE GAIN: <estimate 0.0-1.0 how much this increases understanding>
                 self.stats['rl_action_count'] += 1
                 
                 # Check if meta-strategist should generate new instruction
+                checkpoint_meta_start = time.time()
                 if await self.meta_strategist.should_generate_instruction():
                     instruction = await self.meta_strategist.generate_instruction(
                         current_state=state_dict,
                         q_values=q_values,
                         motivation=motivation.dominant_drive().value
                     )
+                print(f"[PLANNING-CHECKPOINT] Meta-strategist check: {time.time() - checkpoint_meta_start:.3f}s")
                 
                 # Q-values already computed above
                 print(f"[RL] Q-values: {', '.join([f'{k}={v:.2f}' for k, v in sorted(q_values.items(), key=lambda x: x[1], reverse=True)[:3]])}")
@@ -3901,12 +3918,14 @@ COHERENCE GAIN: <estimate 0.0-1.0 how much this increases understanding>
                 meta_context = self.meta_strategist.get_active_instruction_context()
                 
                 # === MULTI-TIER STUCK DETECTION ===
+                checkpoint_stuck_start = time.time()
                 
                 # Tier 1: Failsafe stuck detection (always runs, no cloud needed)
                 failsafe_stuck, failsafe_reason, failsafe_recovery = self._detect_stuck_failsafe(
                     perception=perception,
                     game_state=game_state
                 )
+                print(f"[PLANNING-CHECKPOINT] Failsafe stuck detection: {time.time() - checkpoint_stuck_start:.3f}s")
                 
                 if failsafe_stuck:
                     # Measure consciousness impact
@@ -3920,11 +3939,14 @@ COHERENCE GAIN: <estimate 0.0-1.0 how much this increases understanding>
                         return failsafe_recovery
                 
                 # Tier 2: Gemini vision stuck detection (every 10 cycles, cloud-based)
+                checkpoint_gemini_stuck_start = time.time()
                 if self.cycle_count % 10 == 0 and self.hybrid_llm:
+                    print(f"[PLANNING-CHECKPOINT] Starting Gemini vision stuck detection...")
                     is_stuck, recovery_action = await self._detect_stuck_with_gemini(
                         perception=perception,
                         recent_actions=self.action_history[-10:]
                     )
+                    print(f"[PLANNING-CHECKPOINT] Gemini stuck detection: {time.time() - checkpoint_gemini_stuck_start:.3f}s")
                     
                     if is_stuck and recovery_action:
                         # Measure consciousness impact of stuck state
@@ -3950,35 +3972,47 @@ COHERENCE GAIN: <estimate 0.0-1.0 how much this increases understanding>
                             print(f"[GEMINI-STUCK] Using fallback recovery: sneak")
                             self.stats['gemini_stuck_detections'] = self.stats.get('gemini_stuck_detections', 0) + 1
                             return 'sneak'
+                else:
+                    print(f"[PLANNING-CHECKPOINT] Skipping Gemini stuck detection (cycle {self.cycle_count})")
                 
                 # Gemini MoE: Fast action selection with 6 Gemini Flash experts (participates in race)
+                # Check rate limit BEFORE starting expensive MoE query
+                checkpoint_moe_check = time.time()
                 gemini_moe_task = None
                 if self.moe and hasattr(self.moe, 'gemini_experts') and len(self.moe.gemini_experts) > 0:
-                    print(f"[GEMINI-MOE] Starting {len(self.moe.gemini_experts)} Gemini Flash experts for fast action selection...")
+                    # Check if Gemini is rate-limited
+                    is_limited, wait_time = self.moe.is_gemini_rate_limited()
+                    print(f"[PLANNING-CHECKPOINT] MoE rate limit check: {time.time() - checkpoint_moe_check:.3f}s")
                     
-                    # Build prompt for Gemini experts
-                    vision_prompt = f"""Analyze this Skyrim gameplay:
+                    if is_limited:
+                        print(f"[GEMINI-MOE] ⚠️ SKIPPING - Gemini rate-limited (would wait {wait_time:.1f}s)")
+                        print(f"[GEMINI-MOE] This prevents timeout - MoE won't participate in this cycle")
+                    else:
+                        print(f"[GEMINI-MOE] ✓ Rate limit OK - Starting {len(self.moe.gemini_experts)} Gemini Flash experts for fast action selection...")
+                        
+                        # Build prompt for Gemini experts
+                        vision_prompt = f"""Analyze this Skyrim gameplay:
 Scene: {perception.get('scene_type', 'unknown')}
 Health: {state_dict.get('health', 100)}%
 In Combat: {state_dict.get('in_combat', False)}
 Enemies: {state_dict.get('enemies_nearby', 0)}
 
 What do you see and recommend?"""
-                    
-                    reasoning_prompt = f"""Recommend ONE action:
+                        
+                        reasoning_prompt = f"""Recommend ONE action:
 Available: {', '.join(available_actions)}
 Top Q-values: {', '.join(f'{k}={v:.2f}' for k, v in sorted(q_values.items(), key=lambda x: x[1], reverse=True)[:3])}
 
 Format: ACTION: <action_name>"""
-                    
-                    gemini_moe_task = asyncio.create_task(
-                        self.moe.query_all_experts(
-                            vision_prompt=vision_prompt,
-                            reasoning_prompt=reasoning_prompt,
-                            image=perception.get('screenshot'),
-                            context=state_dict
+                        
+                        gemini_moe_task = asyncio.create_task(
+                            self.moe.query_all_experts(
+                                vision_prompt=vision_prompt,
+                                reasoning_prompt=reasoning_prompt,
+                                image=perception.get('screenshot'),
+                                context=state_dict
+                            )
                         )
-                    )
                 
                 # Claude: Deep reasoning/sensorimotor (async background, stores to memory)
                 claude_reasoning_task = None

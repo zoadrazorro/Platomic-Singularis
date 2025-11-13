@@ -19,7 +19,8 @@ class LMStudioConfig:
     model_name: str = "microsoft/phi-4-mini-reasoning"
     temperature: float = 0.7
     max_tokens: int = 4096  # Increased for Phi-4 models
-    timeout: int = 120
+    timeout: int = 30  # Reduced for faster failures and retries
+    request_timeout: int = 25  # Per-request timeout (slightly lower than session timeout)
     
 
 class LMStudioClient:
@@ -173,10 +174,14 @@ class LMStudioClient:
             payload["stop"] = stop
         
         try:
+            # Adaptive timeout based on request type
+            # Vision requests need more time than text-only
+            adaptive_timeout = self.config.timeout if image_path else self.config.request_timeout
+            
             # Staggered delay to prevent overwhelming LM Studio with simultaneous requests
-            # Each request waits 0.4s to create 0.4s intervals between activations
+            # Each request waits 0.3s to create 0.3s intervals between activations (reduced from 0.4s)
             import asyncio
-            await asyncio.sleep(0.4)
+            await asyncio.sleep(0.3)
             
             logger.debug(
                 "Sending request to LM Studio",
@@ -184,13 +189,15 @@ class LMStudioClient:
                     "model": self.config.model_name,
                     "prompt_length": len(prompt),
                     "temperature": payload["temperature"],
+                    "timeout": adaptive_timeout,
+                    "has_image": image_path is not None
                 }
             )
             
             async with self.session.post(
                 f"{self.config.base_url}/chat/completions",
                 json=payload,
-                timeout=aiohttp.ClientTimeout(total=self.config.timeout)
+                timeout=aiohttp.ClientTimeout(total=adaptive_timeout)
             ) as response:
                 # Read response body first (before raise_for_status)
                 response_text = await response.text()

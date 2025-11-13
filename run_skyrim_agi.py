@@ -129,7 +129,7 @@ async def main():
             # These are used when cloud LLMs fail or hit rate limits
             qwen3_vl_perception_model="qwen/qwen3-vl-30b",  # MUST be vision-capable model
             huihui_cognition_model="mistralai/mistral-7b-instruct-v0.3",
-            phi4_action_model="microsoft/phi-4",
+            phi4_action_model="microsoft/phi-4-mini-reasoning",  # Fixed model identifier
             
             # Consensus weights
             parallel_consensus_weight_moe=0.6,
@@ -203,7 +203,7 @@ async def main():
             use_moe=False,
             
             # Local models (used only if fallback enabled)
-            phi4_action_model="microsoft/phi-4",
+            phi4_action_model="microsoft/phi-4-mini-reasoning",  # Fixed model identifier
             huihui_cognition_model="mistralai/mistral-7b-instruct-v0.3",
             qwen3_vl_perception_model="qwen/qwen3-vl-30b",  # MUST be vision-capable model
             
@@ -228,7 +228,7 @@ async def main():
             use_local_fallback=False,
             
             # Local models only
-            phi4_action_model="microsoft/phi-4",
+            phi4_action_model="microsoft/phi-4-mini-reasoning",  # Fixed model identifier
             huihui_cognition_model="mistralai/mistral-7b-instruct-v0.3",
             qwen3_vl_perception_model="qwen/qwen3-vl-30b",  # MUST be vision-capable model
             

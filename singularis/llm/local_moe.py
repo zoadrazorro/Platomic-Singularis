@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from loguru import logger
 
 from .lmstudio_client import LMStudioClient, LMStudioConfig
+from .response_cache import LLMResponseCache
 
 
 @dataclass
@@ -21,9 +22,11 @@ class LocalMoEConfig:
     """Configuration for local MoE system."""
     num_experts: int = 4  # Number of phi-4-mini-reasoning experts
     expert_model: str = "microsoft/phi-4-mini-reasoning"
-    synthesizer_model: str = "microsoft/phi-4"  # Use phi-4 for synthesis
+    synthesizer_model: str = "microsoft/phi-4-mini-reasoning"  # Use phi-4-mini for synthesis
+    fallback_synthesizer: str = "mistralai/mistral-nemo-instruct-2407"  # Fallback if phi-4 fails
     base_url: str = "http://localhost:1234/v1"
-    timeout: int = 15  # Timeout per expert query
+    timeout: int = 20  # Increased timeout per expert query for reliability
+    synthesis_timeout: int = 15  # Separate timeout for synthesis step
     max_tokens: int = 1024
 
 
@@ -50,8 +53,16 @@ class LocalMoEOrchestrator:
         # Initialize expert clients
         self.experts: List[LMStudioClient] = []
         self.synthesizer: Optional[LMStudioClient] = None
+        self.fallback_synthesizer: Optional[LMStudioClient] = None
         
-        logger.info(f"Local MoE initialized: {config.num_experts} experts + 1 synthesizer")
+        # Initialize response cache
+        self.cache = LLMResponseCache(
+            max_size=200,
+            ttl_seconds=120.0,  # Cache for 2 minutes
+            enable_similarity=True
+        )
+        
+        logger.info(f"Local MoE initialized: {config.num_experts} experts + 1 synthesizer + cache")
     
     async def initialize(self):
         """Initialize all LM Studio clients."""
@@ -82,11 +93,24 @@ class LocalMoEOrchestrator:
         synth_config = LMStudioConfig(
             base_url=self.config.base_url,
             model_name=self.config.synthesizer_model,
-            timeout=self.config.timeout,
+            timeout=self.config.synthesis_timeout,  # Use dedicated synthesis timeout
             max_tokens=512  # Increased for better synthesis
         )
         self.synthesizer = LMStudioClient(synth_config)
         logger.info(f"✓ Synthesizer: {self.config.synthesizer_model}")
+        
+        # Initialize fallback synthesizer (Mistral-Nemo)
+        if self.config.fallback_synthesizer:
+            fallback_config = LMStudioConfig(
+                base_url=self.config.base_url,
+                model_name=self.config.fallback_synthesizer,
+                timeout=self.config.synthesis_timeout,
+                max_tokens=512
+            )
+            self.fallback_synthesizer = LMStudioClient(fallback_config)
+            logger.info(f"✓ Fallback synthesizer: {self.config.fallback_synthesizer}")
+        else:
+            self.fallback_synthesizer = None
         
         logger.info("Local MoE initialization complete - all models can run in parallel!")
     
@@ -151,7 +175,24 @@ class LocalMoEOrchestrator:
         Returns:
             Tuple of (action, reasoning) or None if failed
         """
-        logger.info("[LOCAL-MOE] Starting parallel expert queries...")
+        # Check cache first
+        scene_type = perception.get('scene_type', 'unknown')
+        health = getattr(game_state, 'health', 100.0)
+        in_combat = getattr(game_state, 'in_combat', False)
+        actions_tuple = tuple(sorted(available_actions))
+        
+        cached = self.cache.get(
+            scene_type=scene_type,
+            health=health,
+            in_combat=in_combat,
+            available_actions=actions_tuple
+        )
+        
+        if cached is not None:
+            logger.info(f"[LOCAL-MOE] ✓ Cache hit: {cached[0]}")
+            return cached
+        
+        logger.info("[LOCAL-MOE] Cache miss - starting parallel expert queries...")
         
         # Build prompt for experts
         visual_info = perception.get('visual_analysis', 'No visual analysis available')
@@ -249,11 +290,76 @@ REASONING: <brief explanation>"""
             
             if action:
                 logger.info(f"[LOCAL-MOE] ✓ Final decision: {action}")
-                return (action, reasoning[:200])
+                
+                # Cache the result
+                result = (action, reasoning[:200])
+                self.cache.put(
+                    scene_type=scene_type,
+                    health=health,
+                    in_combat=in_combat,
+                    available_actions=actions_tuple,
+                    response=result
+                )
+                
+                return result
             else:
                 logger.warning("[LOCAL-MOE] Could not extract action from synthesis")
                 return None
                 
         except Exception as e:
             logger.error(f"[LOCAL-MOE] Synthesis failed: {e}")
+            
+            # Try fallback synthesizer (Mistral-Nemo)
+            if self.fallback_synthesizer:
+                try:
+                    logger.info("[LOCAL-MOE] Retrying synthesis with Mistral-Nemo fallback...")
+                    synth_response = await self.fallback_synthesizer.generate(
+                        prompt=synthesis_prompt,
+                        system_prompt="You are a decisive AI synthesizer. Choose the best action based on expert consensus.",
+                        max_tokens=256
+                    )
+                    
+                    synth_text = synth_response.get('content', '')
+                    
+                    # Parse action
+                    action = None
+                    reasoning = synth_text
+                    
+                    for line in synth_text.split('\n'):
+                        if line.strip().startswith('ACTION:'):
+                            action_text = line.split('ACTION:')[1].strip()
+                            for avail_action in available_actions:
+                                if avail_action.lower() in action_text.lower():
+                                    action = avail_action
+                                    break
+                            break
+                    
+                    if not action:
+                        for avail_action in available_actions:
+                            if avail_action in synth_text.lower():
+                                action = avail_action
+                                break
+                    
+                    if action:
+                        logger.info(f"[LOCAL-MOE] ✓ Fallback synthesis succeeded: {action}")
+                        
+                        # Cache the fallback result
+                        result = (action, reasoning[:200])
+                        self.cache.put(
+                            scene_type=scene_type,
+                            health=health,
+                            in_combat=in_combat,
+                            available_actions=actions_tuple,
+                            response=result
+                        )
+                        
+                        return result
+                    else:
+                        logger.warning("[LOCAL-MOE] Fallback synthesis could not extract action")
+                        return None
+                        
+                except Exception as fallback_err:
+                    logger.error(f"[LOCAL-MOE] Fallback synthesis also failed: {fallback_err}")
+                    return None
+            else:
             return None

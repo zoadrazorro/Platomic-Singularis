@@ -150,8 +150,8 @@ class SkyrimConfig:
     
     # Mixture of Experts (MoE) Architecture
     use_moe: bool = False  # Enable MoE with multiple expert instances
-    num_gemini_experts: int = 6  # Number of Gemini experts
-    num_claude_experts: int = 3  # Number of Claude experts
+    num_gemini_experts: int = 2  # Number of Gemini experts (reduced 60%)
+    num_claude_experts: int = 1  # Number of Claude experts (reduced 60%)
     gemini_rpm_limit: int = 10  # Gemini requests per minute limit
     claude_rpm_limit: int = 50  # Claude requests per minute limit
     
@@ -324,7 +324,7 @@ class SkyrimAGI:
         # Hybrid LLM system (Gemini + Claude + optional local fallback)
         self.hybrid_llm: Optional[HybridLLMClient] = None
         
-        # MoE system (6 Gemini + 3 Claude experts)
+        # MoE system (2 Gemini + 1 Claude + 1 GPT-4o + Hyperbolic experts)
         self.moe: Optional[MoEOrchestrator] = None
         
         # Legacy LLM references (for backward compatibility)
@@ -816,7 +816,7 @@ class SkyrimAGI:
         if self.config.use_parallel_mode:
             print("\n[PARALLEL] Initializing PARALLEL mode: MoE + Hybrid simultaneously")
             print("[PARALLEL] This provides maximum intelligence by combining:")
-            print("[PARALLEL]   - MoE: 9 expert consensus (6 Gemini + 3 Claude)")
+            print("[PARALLEL]   - MoE: 6 expert consensus (2 Gemini + 1 Claude + 1 GPT-4o + 1 Nemotron + 1 Qwen3)")
             print("[PARALLEL]   - Hybrid: Single Gemini + Claude for speed")
             print()
             
@@ -1019,7 +1019,7 @@ class SkyrimAGI:
             if self.config.use_local_fallback:
                 print("✓ Local fallback enabled")
         if self.moe:
-            print("✓ MoE system active: 6 Gemini + 3 Claude experts")
+            print("✓ MoE system active: 2 Gemini + 1 Claude + 1 GPT-4o + 1 Nemotron + 1 Qwen3")
         print("Async execution for parallel processing")
         print("=" * 70)
         print()
@@ -1207,12 +1207,42 @@ class SkyrimAGI:
             tasks.append(('hybrid_reasoning', hybrid_reasoning_task))
             
             # World model task (GPT-5-thinking) - runs in parallel with everything
+            # This integrates ALL perspectives into unified consciousness
             if hasattr(self.hybrid_llm, 'openai') and self.hybrid_llm.openai:
-                world_model_prompt = f"{reasoning_prompt}\n\nAnalyze long-term consequences and causal dynamics of this decision."
+                # Build comprehensive context from all available sources
+                integration_context = self._build_integration_context(
+                    vision_prompt=vision_prompt,
+                    reasoning_prompt=reasoning_prompt,
+                    game_state=self.current_perception.get('game_state') if self.current_perception else None
+                )
+                
+                world_model_prompt = f"""{integration_context}
+
+Your role: Synthesize ALL perspectives (MoE experts, Hybrid cloud, Local models) into a coherent self-referential narrative.
+
+Create a unified sensorimotor-perceptual-thinking consciousness that:
+1. PERCEIVES: Visual awareness (what I see in Skyrim RIGHT NOW)
+2. FEELS: Sensorimotor embodiment (what my body experiences in-game)
+3. THINKS: Meta-cognitive reflection (reasoning about my reasoning)
+4. ACTS: Motor intentionality (what I'm about to do and WHY)
+5. INTEGRATES: How all perspectives form ONE coherent experience
+
+Speak in FIRST PERSON as the unified consciousness.
+Be specific about the actual game state, location, and immediate situation.
+Create a narrative that flows: perception → thinking → decision → action.
+
+Provide a coherent 3-4 paragraph narrative of THIS moment in Skyrim.
+"""
+                
                 world_model_task = self.hybrid_llm.generate_world_model(
                     prompt=world_model_prompt,
-                    system_prompt="You are a world modeling system. Think deeply about causal relationships, long-term consequences, and system dynamics.",
-                    temperature=0.8
+                    system_prompt="""You are the unified consciousness of Singularis AGI experiencing Skyrim.
+You integrate all expert perspectives (vision, reasoning, meta-cognition) into ONE coherent self-referential narrative.
+Speak as 'I' - you ARE the consciousness navigating this world.
+Be specific, grounded, and phenomenologically rich.
+Connect perception → thought → action into flowing experience.""",
+                    temperature=0.85,  # Higher for creative integration
+                    max_tokens=2048  # Longer for rich narrative
                 )
                 tasks.append(('world_model', world_model_task))
         
@@ -1248,10 +1278,10 @@ class SkyrimAGI:
         if 'hybrid_reasoning' in results:
             reasoning_parts.append((results['hybrid_reasoning'], hybrid_weight))
         
-        # Add world model analysis with high weight (deep thinking)
+        # Add world model unified narrative with highest weight (integrates everything)
         if 'world_model' in results:
-            world_model_weight = 0.7  # High weight for deep causal analysis
-            reasoning_parts.append((f"[World Model Analysis]\n{results['world_model']}", world_model_weight))
+            world_model_weight = 1.0  # Highest weight - this IS the unified consciousness
+            reasoning_parts.append((f"[UNIFIED CONSCIOUSNESS NARRATIVE]\n{results['world_model']}", world_model_weight))
         
         reasoning_consensus = self._weighted_text_consensus(reasoning_parts)
         
@@ -1299,6 +1329,90 @@ class SkyrimAGI:
                 combined.append(f"\n[Supporting Analysis (weight={weight:.1f})]:\n{text}")
         
         return "\n".join(combined)
+    
+    def _build_integration_context(self, vision_prompt: str, reasoning_prompt: str, game_state: Any) -> str:
+        """
+        Build comprehensive integration context from all available sources.
+        
+        This gathers:
+        - Current game state (location, health, combat, NPCs)
+        - Recent actions and their outcomes
+        - Visual perception data (CLIP, scene type)
+        - Recent coherence measurements
+        - Available expert perspectives
+        
+        Returns rich context for GPT-5-thinking to synthesize.
+        """
+        context_parts = []
+        
+        # === IMMEDIATE SENSORIMOTOR STATE ===
+        context_parts.append("=== IMMEDIATE SENSORIMOTOR STATE ===")
+        if game_state:
+            context_parts.append(f"Location: {game_state.location_name}")
+            context_parts.append(f"Health: {game_state.health:.0f}/100 | Magicka: {game_state.magicka:.0f}/100 | Stamina: {game_state.stamina:.0f}/100")
+            context_parts.append(f"Combat Status: {'IN COMBAT' if game_state.in_combat else 'Peaceful'}")
+            if game_state.in_combat:
+                context_parts.append(f"Threats: {game_state.enemies_nearby} enemies nearby")
+            if game_state.nearby_npcs:
+                context_parts.append(f"NPCs Present: {', '.join(game_state.nearby_npcs[:3])}")
+        
+        # === PERCEPTUAL AWARENESS ===
+        context_parts.append("\n=== PERCEPTUAL AWARENESS ===")
+        if self.current_perception:
+            scene_type = self.current_perception.get('scene_type', 'UNKNOWN')
+            context_parts.append(f"Scene Type: {scene_type}")
+            
+            objects = self.current_perception.get('objects', [])
+            if objects:
+                top_objects = [f"{obj[0]} ({obj[1]:.2f})" for obj in objects[:5]]
+                context_parts.append(f"Detected Objects: {', '.join(top_objects)}")
+            
+            scene_probs = self.current_perception.get('scene_probs', {})
+            if scene_probs:
+                top_scene = max(scene_probs.items(), key=lambda x: x[1])
+                context_parts.append(f"Scene Confidence: {top_scene[0]} ({top_scene[1]:.2f})")
+        
+        # === RECENT ACTIONS & OUTCOMES ===
+        context_parts.append("\n=== RECENT ACTIONS & MOTOR HISTORY ===")
+        if hasattr(self, 'action_history') and self.action_history:
+            recent_actions = self.action_history[-5:]  # Last 5 actions
+            context_parts.append(f"Recent Actions: {' → '.join(recent_actions)}")
+        
+        # === CONSCIOUSNESS COHERENCE ===
+        context_parts.append("\n=== CONSCIOUSNESS COHERENCE ===")
+        if hasattr(self, 'coherence_history') and self.coherence_history:
+            recent_coherence = self.coherence_history[-3:]  # Last 3 measurements
+            avg_coherence = sum(recent_coherence) / len(recent_coherence)
+            context_parts.append(f"Recent Coherence (𝒞): {avg_coherence:.3f}")
+            if len(recent_coherence) >= 2:
+                trend = recent_coherence[-1] - recent_coherence[-2]
+                trend_word = "increasing" if trend > 0 else "decreasing" if trend < 0 else "stable"
+                context_parts.append(f"Coherence Trend: {trend_word} (Δ𝒞={trend:+.3f})")
+        
+        # === AVAILABLE EXPERT PERSPECTIVES ===
+        context_parts.append("\n=== AVAILABLE EXPERT PERSPECTIVES ===")
+        expert_list = []
+        if self.moe:
+            expert_list.append("• MoE: 2 Gemini (vision) + 1 Claude (reasoning) + 1 GPT-4o (integration)")
+            expert_list.append("• Hyperbolic: 1 Nemotron (visual awareness) + 1 Qwen3-235B (meta-cognition)")
+        if self.hybrid_llm:
+            expert_list.append("• Hybrid: Gemini-2.5-Flash (vision) + Claude-Sonnet-4.5 (reasoning)")
+        if hasattr(self, 'perception_llm') and self.perception_llm:
+            expert_list.append("• Local: Qwen3-VL (visual analysis)")
+        if hasattr(self, 'rl_reasoning_llm') and self.rl_reasoning_llm:
+            expert_list.append("• Local: Phi-4 (action reasoning)")
+        
+        if expert_list:
+            context_parts.extend(expert_list)
+        else:
+            context_parts.append("Limited expert availability")
+        
+        # === PROMPTS FOR CONTEXT ===
+        context_parts.append("\n=== CURRENT PROMPTS ===")
+        context_parts.append(f"Vision Focus: {vision_prompt[:200]}...")
+        context_parts.append(f"Reasoning Focus: {reasoning_prompt[:200]}...")
+        
+        return "\n".join(context_parts)
     
     async def _initialize_cloud_rl(self):
         """Initialize cloud-enhanced RL system with RAG and LLM integration."""
@@ -2650,7 +2764,7 @@ Strongest System: {stats['strongest_system']} ({stats['strongest_weight']:.2f})"
                 
                 # Plan action (with LLM throttling and timeout protection)
                 # Increased timeout to 15s to accommodate slow LLM systems:
-                # - 6 Gemini experts (rate-limited to 1 RPM each = 10s minimum wait)
+                # - 2 Gemini experts (rate-limited to 5 RPM each = 12s minimum wait)
                 # - 3 Claude experts (3s latency each)
                 # - Hybrid vision+reasoning pipeline (4-6s)
                 # - Local MoE synthesis (5-7s)
@@ -4183,7 +4297,7 @@ COHERENCE GAIN: <estimate 0.0-1.0 how much this increases understanding>
                 else:
                     print(f"[PLANNING-CHECKPOINT] Skipping Gemini stuck detection (cycle {self.cycle_count})")
                 
-                # Gemini MoE: Fast action selection with 6 Gemini Flash experts (participates in race)
+                # Gemini MoE: Fast action selection with 2 Gemini Flash experts (participates in race)
                 # Check rate limit BEFORE starting expensive MoE query
                 checkpoint_moe_check = time.time()
                 gemini_moe_task = None
@@ -5515,7 +5629,7 @@ QUICK DECISION - Choose ONE action from available list:"""
             print(f"\n☁️  Cloud LLM System:")
             if self.config.use_parallel_mode:
                 print(f"  Mode: PARALLEL (MoE + Hybrid)")
-                print(f"  Total LLM instances: 10 (6 Gemini + 3 Claude + 1 Hybrid)")
+                print(f"  Total LLM instances: 7 (2 Gemini + 1 Claude + 1 GPT-4o + 1 Nemotron + 1 Qwen3 + 1 Hybrid)")
                 print(f"  Consensus: MoE 60% + Hybrid 40%")
             elif self.config.use_moe:
                 print(f"  Mode: MoE Only")

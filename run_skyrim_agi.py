@@ -50,7 +50,7 @@ async def main():
         print("\nLLM Architecture Options:")
         print("  1. Hybrid (Gemini vision + Claude Sonnet 4 reasoning) [Default]")
         print("  2. Hybrid with local fallback (adds optional local LLMs)")
-        print("  3. MoE (6 Gemini + 3 Claude experts with rate limiting)")
+        print("  3. MoE (2 Gemini + 1 Claude + 1 GPT-4o + 1 Nemotron + 1 Qwen3)")
         print("  4. PARALLEL (MoE + Hybrid simultaneously - MAXIMUM INTELLIGENCE)")
         print("  5. Local only (LM Studio models only)")
         
@@ -85,11 +85,11 @@ async def main():
             else:
                 print(f"  Local Fallback: Disabled")
         elif llm_mode == "moe":
-            print(f"  LLM Mode: MoE (6 Gemini + 3 Claude experts)")
+            print(f"  LLM Mode: MoE (2 Gemini + 1 Claude + 1 GPT-4o + 1 Nemotron + 1 Qwen3)")
             print(f"  Rate Limiting: Enabled (10 RPM Gemini, 50 RPM Claude)")
         elif llm_mode == "parallel":
             print(f"  LLM Mode: PARALLEL (MoE + Hybrid simultaneously)")
-            print(f"  Cloud: 10 LLM instances (6 Gemini + 3 Claude + 1 Hybrid)")
+            print(f"  Cloud: 7 LLM instances (2 Gemini + 1 Claude + 1 GPT-4o + 1 Nemotron + 1 Qwen3 + 1 Hybrid)")
             print(f"  Fallback: Local LLMs (Huihui, Qwen3-VL, Phi-4)")
             print(f"  Consensus: MoE 60% + Hybrid 40%")
         else:
@@ -149,7 +149,7 @@ async def main():
             enable_gemini_vision=False,
         )
     elif llm_mode == "moe":
-        # MoE mode: 6 Gemini + 3 Claude experts with rate limiting
+        # MoE mode: 2 Gemini + 1 Claude + 1 GPT-4o + Hyperbolic (Nemotron + Qwen3)
         config = SkyrimConfig(
             dry_run=dry_run,
             autonomous_duration=duration * 60,

@@ -240,9 +240,11 @@ class ConsciousnessBridge:
 
         # 7. Delegate to cloud LLMs when available
         if self.hybrid_llm:
+            print(f"[BRIDGE] Attempting cloud consciousness assessment...")
             try:
                 cloud = await self._cloud_consciousness_assessment(game_state, heuristics, context)
                 if cloud:
+                    print(f"[BRIDGE] ✓ Cloud assessment successful: coherence={cloud.get('coherence', 'N/A'):.3f}")
                     coherence = self._clamp(cloud.get('coherence', coherence))
                     coherence_o = self._clamp(cloud.get('coherence_ontical', coherence_o))
                     coherence_s = self._clamp(cloud.get('coherence_structural', coherence_s))
@@ -251,8 +253,12 @@ class ConsciousnessBridge:
                     consciousness_level = self._clamp(cloud.get('consciousness_level', consciousness_level))
                     self_awareness = self._clamp(cloud.get('self_awareness', self_awareness))
                     self._last_cloud_summary = cloud.get('rationale', self._last_cloud_summary)
+                else:
+                    print(f"[BRIDGE] ⚠️ Cloud assessment returned None - using heuristic fallback")
             except Exception as exc:
-                print(f"[BRIDGE] Cloud consciousness failed: {exc}")
+                print(f"[BRIDGE] ⚠️ Cloud consciousness failed: {exc} - using heuristic fallback")
+                import traceback
+                traceback.print_exc()
         elif self.world_understanding_llm or self.strategic_planning_llm:
             try:
                 enhanced = await self._enhance_with_parallel_llms(

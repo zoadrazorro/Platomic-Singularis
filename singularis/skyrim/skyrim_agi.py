@@ -446,6 +446,7 @@ class SkyrimAGI:
             'action_source_local_moe': 0,  # Local MoE
             'action_source_heuristic': 0,  # Heuristic fallback
             'action_source_timeout': 0,  # Timeout fallback
+            'random_academic_thoughts': 0,  # Brownian motion memory retrievals
         }
         
         # Last successful action source (for caching fast path)
@@ -2607,6 +2608,44 @@ Based on this visual and contextual data, provide:
                     self.current_goal = goal.description
                     print(f"[REASONING] New goal: {self.current_goal}")
                 
+                # 💭 BROWNIAN MOTION RANDOM ACADEMIC THOUGHT (4% occurrence)
+                # Simulates spontaneous memory recall from academic knowledge
+                # Like a random thought popping into consciousness
+                import random
+                if self.curriculum_rag and random.random() < 0.04:  # 4% chance
+                    print("\n" + "~" * 70)
+                    print("💭 RANDOM ACADEMIC THOUGHT (Brownian Motion Memory Retrieval)")
+                    print("~" * 70)
+                    
+                    random_thought = self.curriculum_rag.get_random_academic_thought()
+                    if random_thought:
+                        print(f"[THOUGHT] Category: {random_thought.document.category}")
+                        print(f"[THOUGHT] Topic: {random_thought.document.title}")
+                        print(f"[THOUGHT] Memory Vividness: {random_thought.relevance_score:.2f}")
+                        print(f"[THOUGHT] Content: {random_thought.excerpt}")
+                        
+                        # Store as cognitive memory
+                        self.memory_rag.store_cognitive_memory(
+                            thought=random_thought.excerpt,
+                            context={
+                                'type': 'random_academic_thought',
+                                'category': random_thought.document.category,
+                                'title': random_thought.document.title,
+                                'vividness': random_thought.relevance_score,
+                                'cycle': cycle_count,
+                                'location': game_state.location_name
+                            }
+                        )
+                        
+                        # Increment counter
+                        self.stats['random_academic_thoughts'] += 1
+                        
+                        print("[THOUGHT] ✓ Stored in cognitive memory")
+                    else:
+                        print("[THOUGHT] No academic knowledge available")
+                    
+                    print("~" * 70 + "\n")
+                
                 # Sensorimotor & Geospatial Reasoning every 5 cycles (Claude Sonnet 4.5 with thinking)
                 if cycle_count % 5 == 0 and self.sensorimotor_llm:
                     print("\n" + "="*70)
@@ -2875,12 +2914,16 @@ Goal: {self.current_goal}
 
 Recent actions: {', '.join(self.action_history[-5:]) if self.action_history else 'none'}
 
+SYMBOLIC LOGIC ANALYSIS:
+{chr(10).join(self.skyrim_world.get_logic_analysis(game_state.to_dict())['recommendations']['logical_reasoning']) if self.skyrim_world.get_logic_analysis(game_state.to_dict())['recommendations']['logical_reasoning'] else 'No critical logic recommendations'}
+
 What is the most strategic approach to this situation? Consider:
-1. Immediate tactical needs
+1. Immediate tactical needs (including symbolic logic recommendations above)
 2. Long-term strategic goals  
 3. Risk vs reward tradeoffs
 4. Layer transitions (Combat/Exploration/Menu/Stealth)
-5. Resource management"""
+5. Resource management
+6. How the symbolic logic rules inform tactical decisions"""
 
                     try:
                         # Call full AGI orchestrator with Huihui as consciousness LLM
@@ -3054,6 +3097,32 @@ Strongest System: {stats['strongest_system']} ({stats['strongest_weight']:.2f})"
                         metadata=stats,
                         success=True
                     )
+                    
+                    # Main Brain: Record Symbolic Logic World Model status
+                    try:
+                        world_model_stats = self.skyrim_world.get_stats()
+                        logic_summary = f"""World Model Status:
+Causal Edges: {world_model_stats['causal_edges']}
+NPC Relationships: {world_model_stats['npc_relationships']}
+Locations Discovered: {world_model_stats['locations_discovered']}
+Learned Rules: {world_model_stats['learned_rules']}
+
+Symbolic Logic Engine:
+Facts in KB: {world_model_stats['logic_facts']}
+Inference Rules: {world_model_stats['logic_rules']}
+Predicate Types: {len(world_model_stats['logic_predicates_by_type'])}
+
+Top Predicates:
+{chr(10).join(f'  {k}: {v}' for k, v in sorted(world_model_stats['logic_predicates_by_type'].items(), key=lambda x: x[1], reverse=True)[:5])}"""
+                        
+                        self.main_brain.record_output(
+                            system_name='Symbolic Logic World Model',
+                            content=logic_summary,
+                            metadata=world_model_stats,
+                            success=True
+                        )
+                    except Exception as e:
+                        print(f"[MAIN BRAIN] Could not record logic stats: {e}")
                 
                 # Plan action (with LLM throttling and timeout protection)
                 # Increased timeout to 15s to accommodate slow LLM systems:
@@ -3180,13 +3249,29 @@ Strongest System: {stats['strongest_system']} ({stats['strongest_weight']:.2f})"
                 
                 # Record first 10 cycles, then every 5th to capture early behavior
                 if cycle_count <= 10 or cycle_count % 5 == 0:
+                    # Get logic analysis for Main Brain
+                    try:
+                        logic_analysis_brief = self.skyrim_world.get_logic_analysis(game_state.to_dict())
+                        logic_summary = f"""Logic Recommendations:
+• Defend: {logic_analysis_brief['recommendations']['should_defend']}
+• Heal: {logic_analysis_brief['recommendations']['should_heal']}
+• Retreat: {logic_analysis_brief['recommendations']['should_retreat']}
+• Confidence: {logic_analysis_brief['logic_confidence']:.2f}
+Active Facts: {len(logic_analysis_brief['current_facts'])}
+Applicable Rules: {len(logic_analysis_brief['applicable_rules'])}"""
+                    except Exception as e:
+                        logic_summary = f"Logic analysis unavailable: {e}"
+                    
                     self.main_brain.record_output(
                         system_name='Action Planning',
-                        content=f"Cycle {cycle_count}: {action}",
+                        content=f"""Cycle {cycle_count}: {action}
+
+{logic_summary}""",
                         metadata={
                             'planning_time': planning_duration,
                             'scene': scene_type.value,
-                            'coherence': self.current_consciousness.coherence if self.current_consciousness else 0
+                            'coherence': self.current_consciousness.coherence if self.current_consciousness else 0,
+                            'has_logic_analysis': True
                         },
                         success=True
                     )
@@ -4950,6 +5035,30 @@ Format: ACTION: <action_name>"""
             )
             strategic_analysis['terrain_recommendations'] = terrain_recommendations
             
+            # === SYMBOLIC LOGIC ANALYSIS ===
+            print("\n[LOGIC] Querying symbolic logic system...")
+            logic_analysis = self.skyrim_world.get_logic_analysis(game_state.to_dict())
+            strategic_analysis['logic_analysis'] = logic_analysis
+            
+            # Log symbolic logic recommendations
+            logic_recs = logic_analysis['recommendations']
+            if any(logic_recs.values()):  # If any recommendation is True
+                print(f"[LOGIC] Active recommendations:")
+                if logic_recs['should_defend']:
+                    print(f"  • DEFEND: Hostile NPCs in combat")
+                if logic_recs['should_heal']:
+                    print(f"  • HEAL: Health is critical/low")
+                if logic_recs['should_retreat']:
+                    print(f"  • RETREAT: Outnumbered with escape route")
+                if logic_recs['should_use_magic']:
+                    print(f"  • USE MAGIC: Enemy vulnerable to magic")
+                if logic_recs['should_avoid_detection']:
+                    print(f"  • STEALTH: In stealth mode with enemy nearby")
+                print(f"[LOGIC] Logic confidence: {logic_analysis['logic_confidence']:.2f}")
+                print(f"[LOGIC] Derived {logic_recs['derived_facts']} new facts via forward chaining")
+            else:
+                print(f"[LOGIC] No critical recommendations (confidence: {logic_analysis['logic_confidence']:.2f})")
+            
             print(f"[STRATEGIC] Layer effectiveness: {strategic_analysis['layer_effectiveness']}")
             if strategic_analysis['recommendations']:
                 print(f"[STRATEGIC] Recommendations: {strategic_analysis['recommendations']}")
@@ -6476,6 +6585,7 @@ QUICK DECISION - Choose ONE action from available list:"""
             print(f"\nCurriculum RAG (Academic Knowledge):")
             print(f"  Documents indexed: {curr_stats['documents_indexed']}")
             print(f"  Knowledge retrievals: {curr_stats['retrievals_performed']}")
+            print(f"  Random academic thoughts: {self.stats['random_academic_thoughts']} (Brownian motion)")
             print(f"  Categories: {len(curr_stats['categories'])}")
         
         # Smart Context stats

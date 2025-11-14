@@ -3998,13 +3998,13 @@ Based on this visual and contextual data, provide:
                                     prompt=clip_context,
                                     max_tokens=256
                                 ),
-                                timeout=60.0  # 60 second timeout (Qwen3-VL can be slow)
+                                timeout=180.0  # 180 second timeout (Qwen3-VL 30B needs time to load)
                             )
                             perception['visual_analysis'] = visual_analysis.get('content', '')
                             # Log every Qwen3-VL analysis (since it only runs every 2nd cycle anyway)
                             print(f"[QWEN3-VL] Analysis: {visual_analysis.get('content', '')[:150]}...")
                         except asyncio.TimeoutError:
-                            print(f"[QWEN3-VL] Analysis timed out after 60s")
+                            print(f"[QWEN3-VL] Analysis timed out after 180s")
                             perception['visual_analysis'] = "[TIMEOUT] Visual analysis timed out"
                         
                     except Exception as e:

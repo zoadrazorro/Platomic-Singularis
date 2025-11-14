@@ -19,7 +19,7 @@ class LMStudioConfig:
     model_name: str = "microsoft/phi-4-mini-reasoning"
     temperature: float = 0.7
     max_tokens: int = 4096  # Increased for Phi-4 models
-    timeout: int = 300  # 5 minutes for vision models (Qwen3-VL needs time)
+    timeout: int = 600  # 10 minutes for vision models (Qwen3-VL 30B needs time to load)
     request_timeout: int = 100  # Per-request timeout for text-only (slightly lower than session timeout)
     
 

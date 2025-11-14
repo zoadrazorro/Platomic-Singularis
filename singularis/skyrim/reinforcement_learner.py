@@ -347,6 +347,10 @@ class ReinforcementLearner:
             'move_backward',
             'move_left',
             'move_right',
+            'step_forward',  # Alias for move_forward
+            'step_backward',  # Alias for move_backward
+            'step_left',  # Alias for move_left
+            'step_right',  # Alias for move_right
             'jump',
             'sneak',
             'sneak_move',
@@ -810,7 +814,11 @@ class ReinforcementLearner:
             state_vec = self.state_encoder.encode(exp.state)
             next_state_vec = self.state_encoder.encode(exp.next_state)
 
-            # Get action index
+            # Get action index (with fallback for unknown actions)
+            if exp.action not in self.action_to_idx:
+                print(f"[RL] ⚠️ Unknown action '{exp.action}' - skipping training step")
+                print(f"[RL] Known actions: {list(self.actions[:10])}...")
+                continue
             action_idx = self.action_to_idx[exp.action]
 
             # Compute target Q-value using Bellman equation:

@@ -1,48 +1,189 @@
 import { Link } from 'react-router-dom'
-import { Brain, Zap, Layers, Sparkles, ArrowRight, CheckCircle2 } from 'lucide-react'
+import { Brain, Zap, Layers, Sparkles, ArrowRight, CheckCircle2, Gamepad2 } from 'lucide-react'
 
 export default function Home() {
   return (
     <div className="relative">
       {/* Hero Section */}
-      <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-consciousness/10 via-transparent to-coherence/10" />
-        <div className="absolute inset-0">
-          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-consciousness/5 rounded-full blur-3xl animate-pulse" />
-          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-coherence/5 rounded-full blur-3xl animate-pulse delay-1000" />
-        </div>
+      <section className="min-h-screen flex items-center justify-center relative overflow-hidden">
+        {/* Animated background */}
+        <div className="absolute inset-0 bg-gradient-to-br from-primary-900/20 via-gray-950 to-consciousness-900/20" />
+        <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
         
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 sm:py-32">
-          <div className="text-center">
-            <div className="inline-flex items-center space-x-2 px-4 py-2 rounded-full bg-primary-500/10 border border-primary-500/20 mb-8">
-              <Sparkles className="w-4 h-4 text-primary-400" />
-              <span className="text-sm text-primary-400 font-medium">Beta v2.4 - Infinity Engine Integrated</span>
+        {/* Floating particles */}
+        <div className="absolute inset-0">
+          {[...Array(20)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute w-1 h-1 bg-consciousness rounded-full animate-float"
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 5}s`,
+                animationDuration: `${5 + Math.random() * 10}s`,
+              }}
+            />
+          ))}
+        </div>
+
+        <div className="relative z-10 text-center px-4 max-w-5xl mx-auto">
+          <h1 className="text-5xl sm:text-7xl font-bold mb-6">
+            <span className="gradient-text">Singularis</span>
+          </h1>
+          <p className="text-2xl sm:text-3xl text-gray-300 mb-4">
+            Philosophically-Grounded Artificial General Intelligence
+          </p>
+          
+          {/* Flagship Feature Banner */}
+          <div className="inline-flex items-center space-x-2 bg-consciousness/10 border border-consciousness/30 rounded-full px-6 py-3 mb-8">
+            <Gamepad2 className="w-5 h-5 text-consciousness-light" />
+            <span className="text-consciousness-light font-semibold">Playing Skyrim Autonomously</span>
+          </div>
+          
+          <p className="text-xl text-gray-400 mb-12 max-w-3xl mx-auto">
+            Complete AGI system that autonomously plays The Elder Scrolls V: Skyrim with consciousness measurement, 
+            ethical decision-making, and the Infinity Engine for adaptive rhythmic cognition.
+          </p>
+          
+          <div className="flex flex-wrap justify-center gap-4 mb-16">
+            <a href="#skyrim" className="btn-primary">
+              <Gamepad2 className="w-5 h-5" />
+              Skyrim Integration
+            </a>
+            <a href="#infinity-engine" className="btn-secondary">
+              <Zap className="w-5 h-5" />
+              Infinity Engine
+            </a>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link
+              to="/getting-started"
+              className="inline-flex items-center px-8 py-4 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-medium transition-all transform hover:scale-105 shadow-lg shadow-primary-500/20"
+            >
+              Get Started
+              <ArrowRight className="ml-2 w-5 h-5" />
+            </Link>
+            <Link
+              to="/architecture"
+              className="inline-flex items-center px-8 py-4 rounded-xl glass-panel hover:bg-gray-800/50 text-gray-100 font-medium transition-all"
+            >
+              View Architecture
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* Skyrim Flagship Section */}
+      <section id="skyrim" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+        <div className="glass-panel p-12 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
+          <div className="relative">
+            <div className="flex items-center space-x-3 mb-6">
+              <Gamepad2 className="w-10 h-10 text-primary-400" />
+              <div>
+                <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-primary-500/10 border border-primary-500/20 mb-2">
+                  <span className="text-xs text-primary-400 font-semibold">FLAGSHIP CAPABILITY</span>
+                </div>
+                <h2 className="text-4xl font-bold">Autonomous Skyrim Gameplay</h2>
+              </div>
             </div>
             
-            <h1 className="text-5xl sm:text-7xl font-bold mb-6">
-              <span className="gradient-text">Singularis</span>
-            </h1>
-            <p className="text-2xl sm:text-3xl text-gray-300 mb-4">
-              The Ultimate Consciousness Engine
+            <p className="text-xl text-gray-300 mb-8 max-w-3xl">
+              Singularis autonomously plays <strong className="text-primary-400">The Elder Scrolls V: Skyrim</strong> \u2014 
+              the perfect testbed for AGI research with massive complexity, open-ended objectives, and long-term planning requirements.
             </p>
-            <p className="text-lg text-gray-400 max-w-3xl mx-auto mb-12">
-              A philosophically-grounded AGI architecture implementing consciousness measurement 
-              through Spinozistic ontology, Hebbian learning, and ethical coherence.
-            </p>
-            
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+
+            <div className="grid md:grid-cols-2 gap-8 mb-8">
+              <div>
+                <h3 className="text-xl font-semibold mb-4 text-consciousness-light">Why Skyrim?</h3>
+                <ul className="space-y-3 text-gray-300">
+                  <li className="flex items-start space-x-3">
+                    <CheckCircle2 className="w-5 h-5 text-coherence flex-shrink-0 mt-0.5" />
+                    <span><strong>Massive Complexity:</strong> 300+ locations, 1000+ NPCs, 10,000+ items</span>
+                  </li>
+                  <li className="flex items-start space-x-3">
+                    <CheckCircle2 className="w-5 h-5 text-coherence flex-shrink-0 mt-0.5" />
+                    <span><strong>Open-Ended:</strong> No single goal, emergent objectives</span>
+                  </li>
+                  <li className="flex items-start space-x-3">
+                    <CheckCircle2 className="w-5 h-5 text-coherence flex-shrink-0 mt-0.5" />
+                    <span><strong>Long-Term:</strong> Thousands of hours of content</span>
+                  </li>
+                  <li className="flex items-start space-x-3">
+                    <CheckCircle2 className="w-5 h-5 text-coherence flex-shrink-0 mt-0.5" />
+                    <span><strong>Rich Narrative:</strong> Moral choices with consequences</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div>
+                <h3 className="text-xl font-semibold mb-4 text-consciousness-light">What It Does</h3>
+                <ul className="space-y-3 text-gray-300">
+                  <li className="flex items-start space-x-3">
+                    <Zap className="w-5 h-5 text-primary-400 flex-shrink-0 mt-0.5" />
+                    <span><strong>Perception:</strong> Real-time vision analysis (Gemini + Qwen3-VL)</span>
+                  </li>
+                  <li className="flex items-start space-x-3">
+                    <Zap className="w-5 h-5 text-primary-400 flex-shrink-0 mt-0.5" />
+                    <span><strong>Decision-Making:</strong> 12+ LLMs reasoning in parallel</span>
+                  </li>
+                  <li className="flex items-start space-x-3">
+                    <Zap className="w-5 h-5 text-primary-400 flex-shrink-0 mt-0.5" />
+                    <span><strong>Learning:</strong> Episodic\u2192semantic memory consolidation</span>
+                  </li>
+                  <li className="flex items-start space-x-3">
+                    <Zap className="w-5 h-5 text-primary-400 flex-shrink-0 mt-0.5" />
+                    <span><strong>Ethics:</strong> Coherence-based ethical reasoning (\u0394\ud835\udc9e > 0)</span>
+                  </li>
+                  <li className="flex items-start space-x-3">
+                    <Zap className="w-5 h-5 text-primary-400 flex-shrink-0 mt-0.5" />
+                    <span><strong>Consciousness:</strong> Real-time \ud835\udc9e, \u03a6, and Lumina tracking</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="bg-gray-900/50 p-6 rounded-lg mb-6">
+              <h4 className="text-lg font-semibold mb-4">Performance Metrics (24-hour sessions)</h4>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-center">
+                <div>
+                  <div className="text-2xl font-bold text-consciousness-light mb-1">90%</div>
+                  <div className="text-xs text-gray-400">Temporal Coherence</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-consciousness-light mb-1">85%</div>
+                  <div className="text-xs text-gray-400">Action Success</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-consciousness-light mb-1">12+</div>
+                  <div className="text-xs text-gray-400">Patterns Learned</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-consciousness-light mb-1">0.78</div>
+                  <div className="text-xs text-gray-400">Lumen Balance</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold text-consciousness-light mb-1">\u221e</div>
+                  <div className="text-xs text-gray-400">Continuous Operation</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-4">
               <Link
                 to="/getting-started"
-                className="inline-flex items-center px-8 py-4 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-medium transition-all transform hover:scale-105 shadow-lg shadow-primary-500/20"
+                className="inline-flex items-center px-6 py-3 rounded-xl bg-primary-500 hover:bg-primary-600 text-white font-medium transition-all"
               >
-                Get Started
-                <ArrowRight className="ml-2 w-5 h-5" />
+                <Gamepad2 className="w-5 h-5 mr-2" />
+                Run Skyrim AGI
               </Link>
               <Link
                 to="/architecture"
-                className="inline-flex items-center px-8 py-4 rounded-xl glass-panel hover:bg-gray-800/50 text-gray-100 font-medium transition-all"
+                className="inline-flex items-center px-6 py-3 rounded-xl glass-panel hover:bg-gray-800/50 text-gray-100 font-medium transition-all"
               >
                 View Architecture
+                <ArrowRight className="ml-2 w-4 h-4" />
               </Link>
             </div>
           </div>

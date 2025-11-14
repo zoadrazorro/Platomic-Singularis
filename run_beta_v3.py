@@ -36,6 +36,14 @@ from singularis.core.temporal_binding import TemporalCoherenceTracker
 from singularis.skyrim.action_arbiter import ActionArbiter, ActionPriority
 from singularis.llm.gpt5_orchestrator import GPT5Orchestrator, SystemType
 
+# Import SkyrimAGI for production mode
+try:
+    from singularis.skyrim.skyrim_agi import SkyrimAGI, SkyrimConfig
+    SKYRIM_AGI_AVAILABLE = True
+except ImportError as e:
+    SKYRIM_AGI_AVAILABLE = False
+    logger.warning(f"SkyrimAGI not available: {e}")
+
 from loguru import logger
 
 
@@ -76,6 +84,7 @@ class BetaV3System:
         self.temporal_tracker: Optional[TemporalCoherenceTracker] = None
         self.gpt5: Optional[GPT5Orchestrator] = None
         self.arbiter: Optional[ActionArbiter] = None
+        self.skyrim_agi: Optional['SkyrimAGI'] = None  # Full SkyrimAGI instance for production
         
         self.running = False
         self.start_time = 0.0
@@ -123,22 +132,81 @@ class BetaV3System:
                 logger.info("✓ GPT-5 orchestrator initialized")
             else:
                 logger.warning("⚠ GPT-5 enabled but no API key found")
+                logger.info("   Set OPENAI_API_KEY environment variable or run with --no-gpt5")
+                logger.info("   Continuing without GPT-5 coordination...")
                 self.config.enable_gpt5 = False
         
-        # Initialize ActionArbiter (mock AGI for test mode)
+        # Initialize SkyrimAGI and ActionArbiter
         if self.config.test_mode:
-            from tests.test_beta_v3_arbiter import MockSkyrimAGI
+            # Create inline mock for test mode (no external dependencies)
+            class MockSkyrimAGI:
+                def __init__(self):
+                    self.current_perception = {
+                        'game_state': {'health': 100, 'in_combat': False, 'in_menu': False},
+                        'scene_type': 'exploration',
+                    }
+                    self.action_history = []
+                    self.actions_executed = []
+                    self.being_state = None  # Will be set by BetaV3System
+                
+                async def _execute_action(self, action, scene_type):
+                    self.actions_executed.append(action)
+                    self.action_history.append(action)
+                    await asyncio.sleep(0.05)
+            
             mock_agi = MockSkyrimAGI()
+            mock_agi.being_state = self.being_state  # Share BeingState
+            
             self.arbiter = ActionArbiter(
                 skyrim_agi=mock_agi,
                 gpt5_orchestrator=self.gpt5,
                 enable_gpt5_coordination=self.config.enable_gpt5
             )
-            logger.info("✓ ActionArbiter initialized (test mode)")
+            logger.info("✓ ActionArbiter initialized (test mode with mock AGI)")
         else:
-            logger.warning("⚠ Production mode requires SkyrimAGI integration")
-            # In production, this would be:
-            # self.arbiter = ActionArbiter(skyrim_agi, self.gpt5, self.config.enable_gpt5)
+            # Production mode - use full SkyrimAGI
+            if not SKYRIM_AGI_AVAILABLE:
+                logger.error("❌ SkyrimAGI not available")
+                logger.info("   Install required dependencies or run with --test-mode")
+                raise RuntimeError("SkyrimAGI not available. Use --test-mode flag.")
+            
+            logger.info("Initializing full SkyrimAGI system...")
+            
+            # Create SkyrimConfig with Beta v3 features enabled
+            skyrim_config = SkyrimConfig(
+                # Enable Beta v3 features
+                enable_temporal_binding=self.config.enable_temporal_tracking,
+                temporal_window_size=self.config.temporal_window_size,
+                temporal_timeout=self.config.temporal_timeout,
+                
+                # Disable competing loops (Phase 1)
+                enable_fast_loop=False,
+                enable_auxiliary_exploration=False,
+                
+                # Enable GPT-5 if configured
+                use_gpt5_orchestrator=self.config.enable_gpt5,
+                gpt5_verbose=self.config.verbose,
+            )
+            
+            # Initialize SkyrimAGI
+            self.skyrim_agi = SkyrimAGI(skyrim_config)
+            
+            # Use SkyrimAGI's BeingState
+            self.being_state = self.skyrim_agi.being_state
+            
+            # Use SkyrimAGI's temporal tracker if available
+            if hasattr(self.skyrim_agi, 'temporal_tracker'):
+                self.temporal_tracker = self.skyrim_agi.temporal_tracker
+            
+            # Create ActionArbiter with real SkyrimAGI
+            self.arbiter = ActionArbiter(
+                skyrim_agi=self.skyrim_agi,
+                gpt5_orchestrator=self.gpt5,
+                enable_gpt5_coordination=self.config.enable_gpt5
+            )
+            
+            logger.info("✓ Full SkyrimAGI system initialized")
+            logger.info("✓ ActionArbiter integrated with SkyrimAGI")
         
         logger.info("✅ Beta v3 system initialized")
     

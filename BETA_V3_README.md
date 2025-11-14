@@ -1,227 +1,166 @@
 # Singularis Beta v3
 
-**Complete AGI System with Emergency Stabilization (Phases 1-3)**
+**Experimental AI Agent for Skyrim with Hybrid Action Coordination**
+
+**Version**: Beta v3.5 (November 14, 2025)  
+**Status**: Research Prototype - Not Production Ready
 
 ---
 
-## Overview
+## What This Actually Does
 
-Beta v3 is the stabilized version of Singularis with all Phase 1-3 improvements:
+An experimental AI system that plays Skyrim by:
+1. Taking screenshots of the game
+2. Deciding what action to take (using fast heuristics OR GPT-4.1 Nano)
+3. Sending controller inputs to the game
+4. Learning from what happens
 
-- ✅ **Phase 1**: Emergency stabilization - disabled competing action executors
-- ✅ **Phase 2**: ActionArbiter - single point of action execution with priority system
-- ✅ **Phase 3**: Subsystem integration - GPT-5 coordination, conflict prevention, temporal binding
+**Current State**: Works in controlled test scenarios. Requires significant setup. Many features are experimental or incomplete.
 
-### Key Features
+## Core Features (What Actually Works)
 
-1. **Unified State Management** (`BeingState`)
-   - Single source of truth for all subsystems
-   - Automatic freshness tracking
-   - Comprehensive state snapshots
+1. **Hybrid Action Selection**
+   - Fast heuristics for simple decisions (~1ms)
+   - GPT-4.1 Nano for complex decisions (~3-5s)
+   - Automatically switches based on situation complexity
 
-2. **Temporal Binding** (`TemporalCoherenceTracker`)
-   - Solves perception-action binding problem
-   - Tracks loop closure (target: >95%)
-   - Detects stuck loops automatically
+2. **Virtual Gamepad Control**
+   - Sends Xbox 360 controller inputs to Skyrim
+   - 20+ actions: movement, combat, camera control
+   - Works with any game that accepts controller input
 
-3. **Action Arbiter** (`ActionArbiter`)
-   - Single point of action execution
+3. **Temporal Binding**
+   - Links perception → action → outcome
+   - Detects when agent is stuck in loops
+   - Tracks success/failure of actions
+
+4. **Conflict Prevention**
+   - Prevents contradictory actions
    - Priority system (CRITICAL > HIGH > NORMAL > LOW)
-   - Comprehensive validation and conflict prevention
+   - Validates actions before execution
 
-4. **GPT-5 Coordination**
-   - Meta-cognitive action decision-making
-   - Subsystem consensus building
-   - Intelligent conflict resolution
+5. **Test Mode**
+   - Run without game for testing
+   - Mock AGI for development
+   - Comprehensive test suite (56+ tests)
 
-5. **Conflict Prevention**
-   - Stuck loop detection and prevention
-   - Temporal coherence monitoring
-   - Subsystem conflict detection
-   - Health-based validation
+## What's Experimental
+
+- Vision system (Gemini/Qwen-VL) - works but rate-limited
+- Learning/memory systems - implemented but not validated
+- "Consciousness" metrics - philosophical concepts, not proven
+- Voice/video systems - integrated but optional
+- Many subsystems are templates or partially implemented
+
+**For details**: See `docs/` directory
 
 ---
 
-## Quick Start
-
-### Installation
+## Quick Demo (Test Mode - No Game Required)
 
 ```bash
-# Clone repository
-git clone https://github.com/yourusername/Singularis.git
-cd Singularis
-
-# Install dependencies
+# 1. Install dependencies
 pip install -r requirements.txt
 
-# Install in development mode
-pip install -e .
-```
+# 2. Set up API key (optional for test mode)
+echo "OPENAI_API_KEY=your-key-here" > .env
 
-### Run Tests
-
-```bash
-# Run all tests
-python run_beta_v3_tests.py
-
-# Run quick tests
-python run_beta_v3_tests.py --quick
-
-# Run with coverage
-python run_beta_v3_tests.py --coverage
-```
-
-### Run System
-
-```bash
-# Test mode (no game required)
+# 3. Run test mode (60 seconds)
 python run_beta_v3.py --test-mode --duration 60
+```
 
-# With GPT-5 coordination (requires API key)
-export OPENAI_API_KEY="your-key-here"
-python run_beta_v3.py --test-mode
+**What you'll see**: 
+- System initializes hybrid coordination
+- Generates random action candidates
+- Selects actions using fast local OR GPT-4.1 Nano
+- Executes via virtual gamepad (no game needed)
+- Prints statistics every 60 seconds
 
-# Production mode (with Skyrim)
+**Expected output**:
+```
+Actions: 15-20 successful
+Fast local: 80-90%
+GPT-4.1: 10-20%
+Temporal coherence: ~1.0
+```
+
+## Full Setup (With Skyrim)
+
+**Requirements**:
+- Skyrim running in windowed mode
+- OpenAI API key for GPT-4.1 Nano
+- Google API key for Gemini vision (optional)
+- ~2GB RAM for local vision models
+
+**Warning**: This is experimental. Expect issues with:
+- API rate limits (Gemini: 30 RPM free tier)
+- Vision model accuracy
+- Action execution timing
+- Stuck loops in complex scenarios
+
+```bash
+# Run with full SkyrimAGI
 python run_beta_v3.py
+
+# Monitor in real-time
+# Watch console for action decisions and stats
 ```
+
+**For detailed setup**: See `docs/SETUP.md` (if it exists)
 
 ---
 
-## Architecture
+## Architecture Overview
 
-### System Hierarchy
+**High-level flow**: Perception → State Update → Action Selection (Fast/GPT) → Conflict Check → Execute → Learn
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Beta v3 System                         │
-│                                                             │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  BeingState - Unified State Management              │  │
-│  │  - Single source of truth                           │  │
-│  │  - Subsystem data with timestamps                   │  │
-│  │  - Freshness tracking                               │  │
-│  └──────────────────────────────────────────────────────┘  │
-│                           ↓                                 │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  GPT-5 Orchestrator (Optional)                       │  │
-│  │  - Meta-cognitive coordination                       │  │
-│  │  - Subsystem consensus                               │  │
-│  │  - Intelligent decision-making                       │  │
-│  └──────────────────────────────────────────────────────┘  │
-│                           ↓                                 │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  ActionArbiter - Single Point of Control            │  │
-│  │                                                      │  │
-│  │  ┌────────────────────────────────────────────────┐ │  │
-│  │  │  Conflict Prevention                           │ │  │
-│  │  │  - Stuck loop detection                        │ │  │
-│  │  │  - Temporal coherence check                    │ │  │
-│  │  │  - Subsystem conflict detection                │ │  │
-│  │  │  - Health-based validation                     │ │  │
-│  │  └────────────────────────────────────────────────┘ │  │
-│  │                           ↓                          │  │
-│  │  ┌────────────────────────────────────────────────┐ │  │
-│  │  │  Action Validation & Execution                 │ │  │
-│  │  │  - Freshness check                             │ │  │
-│  │  │  - Priority system                             │ │  │
-│  │  │  - Statistics tracking                         │ │  │
-│  │  └────────────────────────────────────────────────┘ │  │
-│  └──────────────────────────────────────────────────────┘  │
-│                           ↓                                 │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  TemporalCoherenceTracker                            │  │
-│  │  - Perception→action→outcome binding                 │  │
-│  │  - Loop closure tracking (>95% target)               │  │
-│  │  - Stuck loop detection                              │  │
-│  └──────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
-```
+**For detailed architecture**: See `docs/ARCHITECTURE.md`
 
-### Data Flow
+### Simplified Flow
 
 ```
-Perception → BeingState → GPT-5 Coordination → Conflict Prevention → 
-Action Validation → Action Execution → Temporal Binding → Outcome
+Game Screenshot
+      ↓
+Vision System (Gemini/Qwen)
+      ↓
+State Update (BeingState)
+      ↓
+Generate 2-3 Action Candidates
+      ↓
+Decision: Simple or Complex?
+      ├─ Simple → ⚡ Fast Local (<1ms) - Pick highest confidence
+      └─ Complex → 🧠 GPT-4.1 Nano (3-5s) - Reason about options
+      ↓
+Conflict Check (stuck loops, health, etc.)
+      ↓
+Execute via Virtual Gamepad
+      ↓
+Observe Outcome & Learn
 ```
+
+**Key insight**: Most decisions are simple (80-90%) so we use fast heuristics. Only complex/ambiguous situations need GPT-4.1.
 
 ---
 
-## Components
+## Key Components
 
-### 1. BeingState
+**For detailed API documentation**: See `docs/API.md`
 
-**File**: `singularis/core/being_state.py`
+### Core Files
 
-Unified state representation for the entire system.
+- **`run_beta_v3.py`** - Main entry point, test/production modes
+- **`singularis/skyrim/action_arbiter.py`** - Action selection & validation
+- **`singularis/core/being_state.py`** - Unified state management
+- **`singularis/core/temporal_binding.py`** - Perception-action-outcome tracking
+- **`singularis/skyrim/actions.py`** - Virtual gamepad control
+- **`singularis/llm/gpt5_orchestrator.py`** - GPT-4.1 Nano integration
 
-**Key Methods**:
-- `update_subsystem(name, data)` - Update subsystem data
-- `get_subsystem_data(name)` - Get all subsystem data
-- `is_subsystem_fresh(name, max_age)` - Check freshness
-- `get_subsystem_age(name)` - Get data age
-- `export_snapshot()` - Export complete state
+### Priority System
 
-**Subsystems Tracked**:
-- sensorimotor (status, analysis, visual_similarity)
-- action_plan (current, confidence, reasoning)
-- memory (pattern_count, recommendations)
-- emotion (primary_emotion, intensity, recommendations)
-- consciousness (coherence metrics, conflicts)
-- temporal (temporal_coherence, unclosed_bindings, stuck_loop_count)
-
-### 2. TemporalCoherenceTracker
-
-**File**: `singularis/core/temporal_binding.py`
-
-Ensures perception-action-outcome loops close properly.
-
-**Key Methods**:
-- `bind_perception_to_action(perception, action)` - Create binding
-- `close_loop(binding_id, outcome, coherence_delta, success)` - Close loop
-- `get_statistics()` - Get temporal statistics
-- `is_stuck()` - Check if stuck in loop
-
-**Metrics**:
-- Total bindings created
-- Unclosed loops
-- Closure rate (target: >95%)
-- Stuck loop count
-- Success rate
-
-### 3. ActionArbiter
-
-**File**: `singularis/skyrim/action_arbiter.py`
-
-Single point of action execution with comprehensive validation.
-
-**Key Methods**:
-- `request_action(action, priority, source, context)` - Request action
-- `coordinate_action_decision(being_state, candidates)` - GPT-5 coordination
-- `prevent_conflicting_action(action, being_state, priority)` - Conflict check
-- `ensure_temporal_binding_closure(being_state, tracker)` - Closure tracking
-
-**Priority Levels**:
-- **CRITICAL** (4): Survival actions, overrides all conflicts
-- **HIGH** (3): Urgent actions, can override 1-2 conflicts
-- **NORMAL** (2): Standard gameplay
-- **LOW** (1): Background exploration
-
-### 4. GPT5Orchestrator
-
-**File**: `singularis/llm/gpt5_orchestrator.py`
-
-Meta-cognitive coordination through GPT-5.
-
-**Key Methods**:
-- `register_system(system_id, system_type)` - Register subsystem
-- `send_message(system_id, message_type, content, metadata)` - Send message
-- `get_stats()` - Get orchestrator statistics
-
-**Features**:
-- Verbose console logging
-- Message history tracking
-- Token usage tracking
-- Differential coherence measurement
+- **CRITICAL**: Survival (health < 20), overrides everything
+- **HIGH**: Combat, urgent actions
+- **NORMAL**: Exploration, standard gameplay
+- **LOW**: Idle, background tasks
 
 ---
 
@@ -233,14 +172,14 @@ Meta-cognitive coordination through GPT-5.
 @dataclass
 class BetaV3Config:
     # General
-    test_mode: bool = False
+    test_mode: bool = False  # False = Production with full SkyrimAGI
     duration_seconds: Optional[int] = None
     verbose: bool = False
     
-    # GPT-5 Coordination
-    enable_gpt5: bool = True
-    gpt5_model: str = "gpt-5"
-    openai_api_key: Optional[str] = None
+    # GPT-4.1 Nano Coordination (Hybrid System)
+    enable_gpt5: bool = True  # Enable hybrid coordination
+    gpt5_model: str = "gpt-4.1-nano-2025-04-14"  # GPT-4.1 Nano
+    openai_api_key: Optional[str] = None  # Load from .env
     
     # Action Arbiter
     enable_conflict_prevention: bool = True
@@ -252,8 +191,8 @@ class BetaV3Config:
     target_closure_rate: float = 0.95
     
     # Monitoring
-    stats_interval: int = 60
-    checkpoint_interval: int = 300
+    stats_interval: int = 60  # Print stats every 60s
+    checkpoint_interval: int = 300  # Save checkpoint every 5min
 ```
 
 ---
@@ -300,26 +239,33 @@ pytest tests/ -m phase3 -v
 
 ---
 
-## Performance Metrics
+## Performance (Test Mode Observations)
 
-### Targets
+**Note**: These are from controlled test scenarios, not real gameplay.
 
-| Component | Metric | Target | Typical |
-|-----------|--------|--------|---------|
-| BeingState | Update time | <1ms | 0.1-0.5ms |
-| TemporalBinding | Binding creation | <1ms | 0.2-0.8ms |
-| ActionArbiter | Validation | <10ms | 1-5ms |
-| GPT-5 Coordination | Decision time | <2s | 0.5-1.5s |
-| Conflict Prevention | Detection rate | >95% | 96-98% |
-| Temporal Closure | Closure rate | >95% | 92-97% |
+### Decision Speed
 
-### System Metrics
+| Method | Time | Usage |
+|--------|------|-------|
+| Fast Local | <1ms | 80-90% of decisions |
+| GPT-4.1 Nano | 2-5s | 10-20% of decisions |
+| Average | ~0.5s | Depends on complexity |
 
-- **Action success rate**: 85-95%
-- **Rejection rate**: 4-8%
-- **Override rate**: <1%
-- **Temporal coherence**: 0.85-0.97
-- **Global coherence**: 0.75-0.90
+### Test Mode Results (60s run)
+
+- **Actions executed**: 15-20
+- **Success rate**: High (test mode has no failure conditions)
+- **Temporal coherence**: 1.0 (test mode is deterministic)
+- **Stuck loops**: 0 (test mode doesn't get stuck)
+
+### Real Gameplay (Anecdotal)
+
+- **Vision accuracy**: Variable, depends on scene complexity
+- **Action appropriateness**: Mixed, needs tuning
+- **Stuck loop recovery**: Works sometimes
+- **API rate limits**: Frequent issue with free tier Gemini
+
+**Bottom line**: Works in test mode. Real gameplay needs more work.
 
 ---
 
@@ -427,58 +373,75 @@ if not closure_result['meets_target']:
 
 ---
 
-## Changelog
+## What's Actually Complete
 
-### Beta v3 (November 14, 2025)
+### Beta v3.5 (November 14, 2025)
 
-**Phase 3 Complete**:
-- ✅ GPT-5 orchestrator coordination
-- ✅ Conflict prevention system
-- ✅ Temporal binding closure tracking
-- ✅ BeingState integration
-- ✅ Comprehensive test suite (56+ tests)
-- ✅ Complete documentation
+**Working**:
+- ✅ Hybrid action selection (fast local + GPT-4.1 Nano)
+- ✅ Virtual gamepad control (20+ actions)
+- ✅ Test mode with mock AGI
+- ✅ Temporal binding (perception-action-outcome tracking)
+- ✅ Conflict prevention (stuck loops, priorities)
+- ✅ Test suite (56+ tests passing)
 
-**Phase 2 Complete**:
-- ✅ ActionArbiter implementation
-- ✅ Priority system
-- ✅ Comprehensive validation
-- ✅ Statistics tracking
+**Partially Working**:
+- ⚠️ Vision system (works but rate-limited, accuracy varies)
+- ⚠️ Full SkyrimAGI integration (many subsystems are templates)
+- ⚠️ Learning/memory (implemented but not validated)
+- ⚠️ Real gameplay (works in simple scenarios, needs tuning)
 
-**Phase 1 Complete**:
-- ✅ Disabled competing action executors
-- ✅ Perception timestamp validation
-- ✅ Single-threaded control flow
+**Experimental/Unproven**:
+- 🔬 "Consciousness" metrics (philosophical concepts)
+- 🔬 Voice/video systems (integrated but optional)
+- 🔬 Long-term stability (not tested beyond short runs)
+- 🔬 Complex gameplay scenarios
+
+**Known Issues**:
+- API rate limits (Gemini free tier: 30 RPM)
+- Vision model accuracy in complex scenes
+- Stuck loop recovery not always effective
+- Many subsystems are placeholders
 
 ---
 
-## Roadmap
+## What Needs Work
 
-### Phase 4: Full Architecture Test (Next)
-- [ ] Measure perception→action latency
-- [ ] Measure override rate
-- [ ] Measure temporal binding closure
-- [ ] 24-hour stability test
-- [ ] Performance profiling
+### High Priority
+- [ ] Improve vision accuracy in complex scenes
+- [ ] Reduce API rate limit issues
+- [ ] Validate learning/memory systems
+- [ ] Test real gameplay beyond simple scenarios
+- [ ] Document actual performance in real gameplay
 
-### Future Enhancements
-- [ ] Advanced conflict resolution strategies
-- [ ] Machine learning for action selection
-- [ ] Distributed subsystem coordination
-- [ ] Real-time performance optimization
-- [ ] Extended monitoring dashboard
+### Medium Priority
+- [ ] Optimize action selection heuristics
+- [ ] Add more robust stuck loop recovery
+- [ ] Improve conflict prevention accuracy
+- [ ] Add gameplay metrics dashboard
+
+### Low Priority
+- [ ] Validate "consciousness" metrics
+- [ ] Test long-term stability (24+ hours)
+- [ ] Optimize subsystem integration
+- [ ] Add more action types
 
 ---
 
 ## Contributing
 
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Add tests for new functionality
-4. Ensure all tests pass (`python run_beta_v3_tests.py`)
-5. Commit changes (`git commit -m 'Add amazing feature'`)
-6. Push to branch (`git push origin feature/amazing-feature`)
-7. Open Pull Request
+This is a research prototype. Contributions welcome, but understand:
+- Many features are experimental
+- No guarantees of stability
+- API keys required for full functionality
+- Setup can be complex
+
+**To contribute**:
+1. Try the test mode demo first
+2. Read existing code and tests
+3. Open an issue before major changes
+4. Add tests for new features
+5. Be realistic about what works
 
 ---
 
@@ -488,16 +451,7 @@ See LICENSE file for details.
 
 ---
 
-## Support
-
-For issues, questions, or contributions:
-- GitHub Issues: [github.com/yourusername/Singularis/issues](https://github.com/yourusername/Singularis/issues)
-- Documentation: See `docs/` directory
-- Tests: See `tests/` directory
-
----
-
-**Version**: Beta v3  
-**Status**: Production Ready ✅  
+**Version**: Beta v3.5  
+**Status**: Research Prototype - Not Production Ready  
 **Last Updated**: November 14, 2025  
-**Maintainer**: Singularis Team
+**Realistic Assessment**: Works in test mode, needs work for real gameplay

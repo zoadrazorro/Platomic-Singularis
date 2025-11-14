@@ -233,6 +233,13 @@ class SkyrimConfig:
     live_audio_frequency: float = 5.0  # Seconds between audio updates
     live_audio_style: str = "analytical"  # Narration style (analytical, dramatic, technical, casual)
     
+    # HaackLang + SCCE Integration (NEW - Cognitive Calculus)
+    use_haacklang: bool = True  # Enable HaackLang cognitive modules
+    haack_beat_interval: float = 0.1  # Beat interval in seconds (10 Hz default)
+    haack_verbose: bool = False  # Verbose HaackLang logging
+    scce_profile: str = "balanced"  # SCCE personality (balanced, anxious, stoic, curious, aggressive, cautious)
+    scce_frequency: int = 1  # Run SCCE cognition_step every N cycles (1 = every cycle)
+    
     # Legacy external augmentation (deprecated in favor of hybrid)
     enable_claude_meta: bool = False
     enable_gemini_vision: bool = False
@@ -709,6 +716,64 @@ class SkyrimAGI:
         print("    ✓ GraphConsciousnessField (subsystem graph)")
         print("    ✓ TemporalSuperpositionEngine (future simulation)")
         print("    ⚠️ OBSERVATION MODE - No control changes")
+        
+        # 23. HaackLang Bridge + SCCE (NEW - Cognitive Calculus Engine)
+        print("  [23/28] HaackLang + SCCE integration...")
+        from ..haacklang_bridge import SingularisHaackBridge
+        from ..skyrim.Haacklang.src.haackc.scc_calculus import (
+            cognition_step,
+            BALANCED_PROFILE,
+            ANXIOUS_PROFILE,
+            STOIC_PROFILE,
+        )
+        
+        self.haack_bridge = None
+        self.scce_profile = BALANCED_PROFILE  # Default profile
+        
+        if self.config.use_haacklang:
+            try:
+                # Initialize HaackLang bridge
+                modules_dir = Path(__file__).parent / "Haacklang" / "cognitive_modules"
+                self.haack_bridge = SingularisHaackBridge(
+                    modules_dir=modules_dir,
+                    beat_interval=self.config.haack_beat_interval,
+                    verbose=self.config.haack_verbose
+                )
+                
+                # Load cognitive modules
+                loaded = self.haack_bridge.load_all_modules()
+                print(f"    ✓ HaackLang runtime initialized")
+                print(f"    ✓ Loaded {len(loaded)} cognitive modules:")
+                for module_name in loaded:
+                    print(f"        - {module_name}.haack")
+                
+                # Register Python callbacks for subsystems
+                self._register_haack_callbacks()
+                
+                # Set SCCE profile based on config
+                profile_name = self.config.scce_profile if hasattr(self.config, 'scce_profile') else 'balanced'
+                if profile_name.lower() == 'anxious':
+                    self.scce_profile = ANXIOUS_PROFILE
+                elif profile_name.lower() == 'stoic':
+                    self.scce_profile = STOIC_PROFILE
+                else:
+                    self.scce_profile = BALANCED_PROFILE
+                
+                print(f"    ✓ SCCE profile: {self.scce_profile.name}")
+                print("    ✓ Temporal cognitive dynamics enabled")
+                print("    ✓ Fear/trust/stress/curiosity evolution active")
+                
+                # Record in double helix
+                if self.double_helix:
+                    self.double_helix.record_activation("haacklang_runtime", True, 1.0)
+                    self.double_helix.record_activation("scce_cognition", True, 1.0)
+                
+            except Exception as e:
+                print(f"    ⚠️ HaackLang/SCCE initialization failed: {e}")
+                print(f"    ⚠️ Continuing without cognitive calculus")
+                self.haack_bridge = None
+        else:
+            print("    ⚠️ HaackLang/SCCE disabled (set use_haacklang=True to enable)")
 
         # MATRIX NETWORK OF IMPROVEMENT + PTPL (scaffolding)
         try:
@@ -2138,6 +2203,107 @@ class SkyrimAGI:
         except Exception as e:
             logger.error(f"[GPT-5] Message failed: {e}")
             return None
+    
+    def _register_haack_callbacks(self):
+        """Register Python callbacks for HaackLang modules to call."""
+        if not self.haack_bridge:
+            return
+        
+        # Perception callbacks
+        def get_danger_level(game_state_dict):
+            """Get current danger level from perception."""
+            try:
+                if hasattr(self, 'current_perception') and self.current_perception:
+                    game_state = self.current_perception.get('game_state')
+                    if game_state:
+                        # Compute danger from health, combat status, enemy count
+                        danger = 0.0
+                        if game_state.in_combat:
+                            danger += 0.5
+                        if game_state.health_percent < 50:
+                            danger += 0.3
+                        if hasattr(game_state, 'enemy_count') and game_state.enemy_count > 0:
+                            danger += min(0.2 * game_state.enemy_count, 0.5)
+                        return min(1.0, danger)
+                return 0.0
+            except Exception:
+                return 0.0
+        
+        def get_fear_level(game_state_dict):
+            """Get fear level from emotion system."""
+            try:
+                if hasattr(self, 'emotion_integration') and self.emotion_integration:
+                    state = self.emotion_integration.emotion_system.get_state()
+                    return state.get('fear', 0.0)
+                return 0.0
+            except Exception:
+                return 0.0
+        
+        def get_trust_level(game_state_dict):
+            """Get trust level (inverse of uncertainty)."""
+            try:
+                if hasattr(self, 'current_consciousness') and self.current_consciousness:
+                    # High coherence = high trust
+                    return self.current_consciousness.coherence
+                return 0.5  # Neutral
+            except Exception:
+                return 0.5
+        
+        def get_stress_level(game_state_dict):
+            """Get stress level from emotion system."""
+            try:
+                if hasattr(self, 'emotion_integration') and self.emotion_integration:
+                    state = self.emotion_integration.emotion_system.get_state()
+                    return state.get('stress', 0.0)
+                return 0.0
+            except Exception:
+                return 0.0
+        
+        def get_curiosity_level(game_state_dict):
+            """Get curiosity level from motivation system."""
+            try:
+                if hasattr(self, 'current_motivation') and self.current_motivation:
+                    # Curiosity is high when not in danger
+                    if hasattr(self, 'current_perception') and self.current_perception:
+                        game_state = self.current_perception.get('game_state')
+                        if game_state and not game_state.in_combat:
+                            return 0.7
+                return 0.3
+            except Exception:
+                return 0.3
+        
+        # Action callbacks
+        def execute_flee():
+            """Execute flee action."""
+            if hasattr(self, 'actions'):
+                self.actions.execute_action(Action.SPRINT)
+                print("[HAACK] Action executed: FLEE")
+        
+        def execute_withdraw():
+            """Execute withdraw action."""
+            if hasattr(self, 'actions'):
+                self.actions.execute_action(Action.SNEAK)
+                print("[HAACK] Action executed: WITHDRAW")
+        
+        def execute_panic():
+            """Execute panic action (random evasive maneuver)."""
+            if hasattr(self, 'actions'):
+                import random
+                actions = [Action.DODGE, Action.JUMP, Action.SPRINT]
+                self.actions.execute_action(random.choice(actions))
+                print("[HAACK] Action executed: PANIC")
+        
+        # Register all callbacks
+        self.haack_bridge.register_python_callback('get_danger_level', get_danger_level)
+        self.haack_bridge.register_python_callback('get_fear_level', get_fear_level)
+        self.haack_bridge.register_python_callback('get_trust_level', get_trust_level)
+        self.haack_bridge.register_python_callback('get_stress_level', get_stress_level)
+        self.haack_bridge.register_python_callback('get_curiosity_level', get_curiosity_level)
+        self.haack_bridge.register_python_callback('execute_flee', execute_flee)
+        self.haack_bridge.register_python_callback('execute_withdraw', execute_withdraw)
+        self.haack_bridge.register_python_callback('execute_panic', execute_panic)
+        
+        print(f"    ✓ Registered {8} Python callbacks for HaackLang")
     
     async def speak_decision(self, action: str, reason: str):
         """Voice system speaks a decision."""
@@ -3949,6 +4115,85 @@ Based on this visual and contextual data, provide:
                     pass
                 
                 print(f"\n[REASONING] Processing cycle {cycle_count}")
+                
+                # ═══════════════════════════════════════════════════════════
+                # SCCE + HaackLang - Cognitive Calculus
+                # ═══════════════════════════════════════════════════════════
+                if self.haack_bridge and cycle_count % self.config.scce_frequency == 0:
+                    try:
+                        from ..skyrim.Haacklang.src.haackc.scc_calculus import cognition_step
+                        
+                        game_state = perception['game_state']
+                        
+                        # Update truthvalues from current perception
+                        if game_state:
+                            # Danger from combat state, health, enemies
+                            danger = 0.0
+                            if game_state.in_combat:
+                                danger += 0.5
+                            if game_state.health_percent < 50:
+                                danger += 0.3
+                            if hasattr(game_state, 'enemy_count') and game_state.enemy_count > 0:
+                                danger += min(0.2 * game_state.enemy_count, 0.5)
+                            
+                            self.haack_bridge.update_truthvalue('danger', 'perception', min(1.0, danger))
+                            
+                            # Fear from emotion system
+                            if hasattr(self, 'emotion_integration') and self.emotion_integration:
+                                emotion_state = self.emotion_integration.emotion_system.get_state()
+                                self.haack_bridge.update_truthvalue('fear', 'perception', emotion_state.get('fear', 0.0))
+                                self.haack_bridge.update_truthvalue('stress', 'perception', emotion_state.get('stress', 0.0))
+                            
+                            # Trust from consciousness coherence
+                            if hasattr(self, 'current_consciousness') and self.current_consciousness:
+                                self.haack_bridge.update_truthvalue('trust', 'strategic', self.current_consciousness.coherence)
+                        
+                        # Run SCCE cognition step (temporal cognitive dynamics)
+                        scce_stats = cognition_step(
+                            truthvalues=self.haack_bridge.runtime.truthvalues,
+                            tracks=self.haack_bridge.runtime.scheduler.tracks,
+                            global_beat=self.haack_bridge.runtime.scheduler.global_beat,
+                            profile=self.scce_profile,
+                            verbose=False
+                        )
+                        
+                        # Execute HaackLang contexts and guards
+                        haack_result = await self.haack_bridge.cycle(
+                            perception=perception,
+                            subsystem_outputs={}
+                        )
+                        
+                        # Handle any actions from HaackLang guards
+                        if haack_result and haack_result.get('action'):
+                            action_name = haack_result['action']
+                            print(f"[HAACK] Guard triggered: {action_name}")
+                            
+                            # Record in double helix
+                            if self.double_helix:
+                                self.double_helix.record_activation("haacklang_guard", True, 1.0)
+                        
+                        # Log SCCE stats every 10 cycles
+                        if cycle_count % 10 == 0:
+                            print(f"[SCCE] Coherence: {scce_stats['coherence']:.3f} | Profile: {scce_stats['profile']}")
+                            
+                            # Get evolved cognitive state
+                            danger_tv = self.haack_bridge.get_truthvalue('danger')
+                            fear_tv = self.haack_bridge.get_truthvalue('fear')
+                            trust_tv = self.haack_bridge.get_truthvalue('trust')
+                            stress_tv = self.haack_bridge.get_truthvalue('stress')
+                            
+                            if danger_tv:
+                                print(f"[SCCE]   Danger: P={danger_tv.get('perception'):.2f} S={danger_tv.get('strategic'):.2f} I={danger_tv.get('intuition'):.2f}")
+                            if fear_tv:
+                                print(f"[SCCE]   Fear:   P={fear_tv.get('perception'):.2f} S={fear_tv.get('strategic'):.2f} I={fear_tv.get('intuition'):.2f}")
+                            if trust_tv:
+                                print(f"[SCCE]   Trust:  P={trust_tv.get('perception'):.2f} S={trust_tv.get('strategic'):.2f} I={trust_tv.get('intuition'):.2f}")
+                            if stress_tv:
+                                print(f"[SCCE]   Stress: P={stress_tv.get('perception'):.2f} S={stress_tv.get('strategic'):.2f} I={stress_tv.get('intuition'):.2f}")
+                        
+                    except Exception as e:
+                        if cycle_count % 20 == 0:
+                            print(f"[SCCE] Error: {e}")
                 
                 # Update BeingState from all subsystems (every cycle)
                 if hasattr(self, 'being_state'):

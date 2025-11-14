@@ -210,6 +210,21 @@ def load_config(args) -> 'SkyrimConfig':
     # Continuum (if available)
     config.use_continuum = True  # Predictive consciousness
     
+    # ========================================
+    # Infinity Engine Phase 2A/2B
+    # ========================================
+    config.use_infinity_engine = True  # Enable adaptive rhythmic cognition
+    config.infinity_verbose = args.verbose  # Verbose Infinity Engine logging
+    config.coherence_v2_threshold = 0.4  # Coherence intervention threshold
+    config.meta_context_enabled = True  # Hierarchical temporal contexts
+    config.polyrhythmic_learning_enabled = True  # Adaptive track periods
+    config.rhythm_learning_rate = 0.01  # How fast rhythms adapt
+    config.harmonic_attraction = 0.1  # Harmonic synchronization strength
+    config.memory_v2_enabled = True  # Temporal-rhythmic memory
+    config.memory_v2_capacity = 1000  # Episodic memory capacity
+    config.memory_consolidation_threshold = 3  # Reinforcements before consolidation
+    config.memory_decay_rate = 0.001  # Forgetting rate per cycle
+    
     # Expert pools - use MORE experts for better quality
     config.num_gpt_vision_experts = 2  # 2 GPT Vision experts (GPT-4o)
     config.num_gemini_experts = 1  # 1 Gemini expert (video/voice only)
@@ -288,6 +303,14 @@ def load_config(args) -> 'SkyrimConfig':
     print(f"     • MetaCognition: {'✅' if config.use_metacog_advisor else '❌'}")
     print(f"     • Continuum: {'✅' if config.use_continuum else '❌'}")
     
+    print(f"\n  🌀 [Infinity Engine]")
+    print(f"     • Adaptive Rhythmic Cognition: {'✅' if config.use_infinity_engine else '❌'}")
+    print(f"     • Coherence Engine V2: {'✅' if config.use_infinity_engine else '❌'}")
+    print(f"     • Meta-Context System: {'✅' if config.meta_context_enabled else '❌'}")
+    print(f"     • Polyrhythmic Learning: {'✅' if config.polyrhythmic_learning_enabled else '❌'}")
+    print(f"     • Memory Engine V2: {'✅' if config.memory_v2_enabled else '❌'}")
+    print(f"     • Verbose: {'✅' if config.infinity_verbose else '❌'}")
+    
     print(f"\n  ⚙️  [Settings]")
     print(f"     • Cycle interval: {config.cycle_interval}s")
     print(f"     • GPT Vision experts: {config.num_gpt_vision_experts}")
@@ -312,6 +335,7 @@ async def run_async_mode(duration: int, config: 'SkyrimConfig'):
     print(f"Duration: {duration} seconds ({duration // 60} minutes)")
     print(f"Mode: Asynchronous (perception || reasoning || action)")
     print(f"Cognition: HaackLang + SCCE (Profile: {config.scce_profile})")
+    print(f"Infinity Engine: Adaptive Rhythmic Cognition + Temporal Memory")
     print(f"APIs: GPT-5 + GPT Vision + Gemini + Claude + Hyperbolic + Local LLMs")
     print(f"Systems: Voice + Video + Research + MetaCognition + Continuum")
     print("=" * 70 + "\n")
@@ -344,6 +368,16 @@ async def run_async_mode(duration: int, config: 'SkyrimConfig'):
         print(f"[VERIFY] [OK] Temporal cognitive dynamics enabled")
     else:
         print("[WARNING] HaackLang/SCCE not initialized")
+    
+    # Verify Infinity Engine
+    if hasattr(agi, 'coherence_v2') and agi.coherence_v2:
+        print(f"[VERIFY] [OK] Infinity Engine - Coherence Engine V2 initialized")
+    if hasattr(agi, 'meta_context') and agi.meta_context:
+        print(f"[VERIFY] [OK] Infinity Engine - Meta-Context System initialized")
+    if hasattr(agi, 'rhythm_learner') and agi.rhythm_learner:
+        print(f"[VERIFY] [OK] Infinity Engine - Polyrhythmic Learning initialized")
+    if hasattr(agi, 'memory_v2') and agi.memory_v2:
+        print(f"[VERIFY] [OK] Infinity Engine - Memory Engine V2 initialized")
     
     # Verify cloud systems
     if hasattr(agi, 'hybrid_llm') and agi.hybrid_llm:

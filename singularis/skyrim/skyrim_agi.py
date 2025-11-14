@@ -2149,6 +2149,62 @@ class SkyrimAGI:
             except:
                 pass
         
+        # PHASE 3.1: Write subsystem outputs to BeingState
+        
+        # Sensorimotor subsystem
+        if hasattr(self, 'sensorimotor_state') and self.sensorimotor_state:
+            self.being_state.update_subsystem('sensorimotor', {
+                'status': self.sensorimotor_state.get('status', 'UNKNOWN'),
+                'analysis': self.sensorimotor_state.get('analysis', ''),
+                'visual_similarity': self.sensorimotor_state.get('visual_similarity', 0.0),
+            })
+        
+        # Action planning subsystem
+        if action:
+            self.being_state.update_subsystem('action_plan', {
+                'current': str(action),
+                'confidence': getattr(self, 'last_action_confidence', 0.5),
+                'reasoning': getattr(self, 'last_action_reasoning', ''),
+            })
+        
+        # Memory subsystem
+        if hasattr(self, 'hierarchical_memory') and self.hierarchical_memory:
+            try:
+                patterns = self.hierarchical_memory.get_semantic_patterns()
+                self.being_state.update_subsystem('memory', {
+                    'pattern_count': len(patterns),
+                    'similar_situations': patterns[-5:] if patterns else [],
+                    'recommendations': [],  # Will be filled by memory system
+                })
+            except:
+                pass
+        
+        # Emotion subsystem (enhanced)
+        if hasattr(self, 'emotion_integration') and self.emotion_integration:
+            try:
+                emotion_state = self.emotion_integration.emotion_state
+                if emotion_state:
+                    recommendations = []
+                    # Get emotion-based action recommendations
+                    if hasattr(self.emotion_integration, 'get_action_recommendations'):
+                        recommendations = self.emotion_integration.get_action_recommendations()
+                    
+                    self.being_state.update_subsystem('emotion', {
+                        'recommendations': recommendations,
+                    })
+            except:
+                pass
+        
+        # Consciousness subsystem
+        if hasattr(self, 'consciousness_checker') and self.consciousness_checker:
+            try:
+                conflicts = self.consciousness_checker._detect_conflicts()
+                self.being_state.update_subsystem('consciousness', {
+                    'conflicts': [c.description for c in conflicts],
+                })
+            except:
+                pass
+        
         # Voice
         if hasattr(self, 'voice_system') and self.voice_system:
             try:
@@ -7786,6 +7842,57 @@ COHERENCE GAIN: <estimate 0.0-1.0 how much this increases understanding>
                         return 'turn_left'
                     else:
                         return 'turn_right'
+            
+            # PHASE 3.2: Consult BeingState before planning
+            print("\n[PLANNING] Consulting unified BeingState...")
+            
+            # Check sensorimotor status from BeingState
+            if self.being_state.is_subsystem_fresh('sensorimotor', max_age=3.0):
+                sm_status = self.being_state.sensorimotor_status
+                sm_analysis = self.being_state.sensorimotor_analysis
+                print(f"[PLANNING] Sensorimotor: {sm_status}")
+                
+                if sm_status == "STUCK":
+                    print(f"[PLANNING] ⚠️ Sensorimotor reports STUCK - prioritizing unstick actions")
+                    print(f"[PLANNING]    Analysis: {sm_analysis}")
+                    # Override with unstick action
+                    unstick_actions = ['activate', 'jump', 'turn_around', 'move_backward']
+                    for action in unstick_actions:
+                        if action in available_actions:
+                            print(f"[PLANNING] → Using unstick action: {action}")
+                            return action
+            
+            # Check emotion recommendations from BeingState
+            if self.being_state.is_subsystem_fresh('emotion', max_age=5.0):
+                emotion = self.being_state.primary_emotion
+                intensity = self.being_state.emotion_intensity
+                recommendations = self.being_state.emotion_recommendations
+                
+                print(f"[PLANNING] Emotion: {emotion} ({intensity:.2f})")
+                if recommendations:
+                    print(f"[PLANNING]    Recommendations: {recommendations}")
+                
+                if emotion == "fear" and intensity > 0.7:
+                    print("[PLANNING] ⚠️ High fear - prioritizing retreat")
+                    retreat_actions = ['retreat', 'move_backward', 'flee']
+                    for action in retreat_actions:
+                        if action in available_actions:
+                            return action
+            
+            # Check memory for similar situations from BeingState
+            if self.being_state.is_subsystem_fresh('memory', max_age=10.0):
+                similar_count = len(self.being_state.memory_similar_situations)
+                if similar_count > 0:
+                    print(f"[PLANNING] Memory: Found {similar_count} similar situations")
+                    # Use past successful actions as candidates (will be used in LLM planning)
+            
+            # Check consciousness conflicts from BeingState
+            if self.being_state.is_subsystem_fresh('consciousness', max_age=5.0):
+                conflicts = self.being_state.consciousness_conflicts
+                if conflicts:
+                    print(f"[PLANNING] ⚠️ Consciousness conflicts detected:")
+                    for conflict in conflicts[:3]:  # Show top 3
+                        print(f"[PLANNING]    - {conflict}")
             
             # Check sensorimotor state BEFORE starting expensive LLM operations
             checkpoint_sensorimotor = time.time()

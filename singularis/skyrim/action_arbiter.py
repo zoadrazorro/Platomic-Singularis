@@ -17,11 +17,13 @@ import asyncio
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, Dict, Any, Callable, Awaitable, TYPE_CHECKING
+from typing import Optional, Dict, Any, Callable, Awaitable, List, TYPE_CHECKING
 from loguru import logger
 
 if TYPE_CHECKING:
     from .skyrim_agi import SkyrimAGI
+    from ..llm.gpt5_orchestrator import GPT5Orchestrator
+    from ..core.being_state import BeingState
 
 
 class ActionPriority(Enum):
@@ -67,14 +69,23 @@ class ActionArbiter:
     Phase 2: Single point of control with priority system
     """
     
-    def __init__(self, skyrim_agi: 'SkyrimAGI'):
+    def __init__(
+        self,
+        skyrim_agi: 'SkyrimAGI',
+        gpt5_orchestrator: Optional['GPT5Orchestrator'] = None,
+        enable_gpt5_coordination: bool = True
+    ):
         """
         Initialize action arbiter.
         
         Args:
             skyrim_agi: Reference to SkyrimAGI instance
+            gpt5_orchestrator: Optional GPT-5 orchestrator for coordination
+            enable_gpt5_coordination: Whether to use GPT-5 for action coordination
         """
         self.agi = skyrim_agi
+        self.gpt5 = gpt5_orchestrator
+        self.enable_gpt5_coordination = enable_gpt5_coordination and gpt5_orchestrator is not None
         
         # Current execution
         self.current_action: Optional[ActionRequest] = None
@@ -97,7 +108,14 @@ class ActionArbiter:
         # Callbacks for requesting systems
         self.callbacks: Dict[str, Callable[[ActionResult], Awaitable[None]]] = {}
         
-        logger.info("[ARBITER] Action Arbiter initialized")
+        # GPT-5 coordination stats
+        self.gpt5_coordination_count = 0
+        self.gpt5_coordination_time = 0.0
+        
+        logger.info(
+            f"[ARBITER] Action Arbiter initialized "
+            f"(GPT-5 coordination: {'enabled' if self.enable_gpt5_coordination else 'disabled'})"
+        )
     
     async def request_action(
         self,
@@ -309,6 +327,342 @@ class ActionArbiter:
             # This sets the flag so the action loop knows it was overridden
             self.current_action = None
     
+    async def coordinate_action_decision(
+        self,
+        being_state: 'BeingState',
+        candidate_actions: List[Dict[str, Any]]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Coordinate action decision through GPT-5 orchestrator.
+        
+        Phase 3.3: GPT-5 Orchestrator Coordination
+        
+        Gathers subsystem states from BeingState and queries GPT-5 for
+        coordinated decision-making across all systems.
+        
+        Args:
+            being_state: Current unified state
+            candidate_actions: List of candidate actions with metadata
+            
+        Returns:
+            Selected action with reasoning, or None if coordination fails
+        """
+        if not self.enable_gpt5_coordination or not self.gpt5:
+            logger.debug("[ARBITER] GPT-5 coordination disabled, skipping")
+            return None
+        
+        start_time = time.time()
+        
+        try:
+            # Gather subsystem states
+            subsystem_states = {
+                'sensorimotor': being_state.get_subsystem_data('sensorimotor'),
+                'action_plan': being_state.get_subsystem_data('action_plan'),
+                'memory': being_state.get_subsystem_data('memory'),
+                'emotion': being_state.get_subsystem_data('emotion'),
+                'consciousness': {
+                    'coherence_C': being_state.coherence_C,
+                    'phi_hat': being_state.phi_hat,
+                    'unity_index': being_state.unity_index,
+                    'conflicts': being_state.consciousness_conflicts
+                },
+                'temporal': {
+                    'temporal_coherence': being_state.temporal_coherence,
+                    'unclosed_bindings': being_state.unclosed_bindings,
+                    'stuck_loop_count': being_state.stuck_loop_count
+                },
+                'global': {
+                    'global_coherence': being_state.global_coherence,
+                    'cycle_number': being_state.cycle_number,
+                    'last_action': being_state.last_action
+                }
+            }
+            
+            # Format candidate actions
+            actions_summary = []
+            for i, action in enumerate(candidate_actions):
+                actions_summary.append(
+                    f"{i+1}. {action.get('action', 'unknown')} "
+                    f"(priority: {action.get('priority', 'NORMAL')}, "
+                    f"source: {action.get('source', 'unknown')}, "
+                    f"confidence: {action.get('confidence', 0.0):.2f})"
+                )
+            
+            # Build coordination request
+            actions_text = "\n".join(actions_summary)
+            content = f"""Action Coordination Request:
+            
+Current Cycle: {being_state.cycle_number}
+Global Coherence: {being_state.global_coherence:.3f}
+Temporal Coherence: {being_state.temporal_coherence:.3f}
+Unclosed Bindings: {being_state.unclosed_bindings}
+Stuck Loop Count: {being_state.stuck_loop_count}
+
+Subsystem Status:
+- Sensorimotor: {subsystem_states['sensorimotor'].get('status', 'UNKNOWN')} (age: {subsystem_states['sensorimotor'].get('age', 999):.1f}s)
+- Action Plan: {subsystem_states['action_plan'].get('current', 'none')} (confidence: {subsystem_states['action_plan'].get('confidence', 0.0):.2f})
+- Memory: {subsystem_states['memory'].get('pattern_count', 0)} patterns, {len(subsystem_states['memory'].get('recommendations', []))} recommendations
+- Emotion: {being_state.primary_emotion} (intensity: {being_state.emotion_intensity:.2f})
+
+Candidate Actions:
+{actions_text}
+
+Which action should be selected? Consider:
+1. Subsystem consensus and conflicts
+2. Temporal coherence and stuck loop prevention
+3. Global coherence optimization
+4. Freshness of subsystem data
+
+Provide: Selected action number (or 0 for none), reasoning, and confidence."""
+            
+            # Query GPT-5
+            logger.info("[ARBITER] Requesting GPT-5 action coordination...")
+            
+            response = await self.gpt5.send_message(
+                system_id="action_arbiter",
+                message_type="action_coordination",
+                content=content,
+                metadata={
+                    'cycle': being_state.cycle_number,
+                    'candidate_count': len(candidate_actions),
+                    'global_coherence': being_state.global_coherence
+                }
+            )
+            
+            # Parse response
+            selected_action = None
+            
+            # Try to extract action number from response
+            response_text = response.response_text.lower()
+            for i, action in enumerate(candidate_actions):
+                if f"action {i+1}" in response_text or f"{i+1}." in response_text[:100]:
+                    selected_action = action.copy()
+                    selected_action['gpt5_reasoning'] = response.reasoning or response.response_text
+                    selected_action['gpt5_confidence'] = response.confidence
+                    break
+            
+            # Track stats
+            elapsed = time.time() - start_time
+            self.gpt5_coordination_count += 1
+            self.gpt5_coordination_time += elapsed
+            
+            logger.info(
+                f"[ARBITER] GPT-5 coordination complete: "
+                f"{'selected' if selected_action else 'no selection'} "
+                f"({elapsed:.2f}s)"
+            )
+            
+            return selected_action
+            
+        except Exception as e:
+            logger.error(f"[ARBITER] GPT-5 coordination failed: {e}")
+            return None
+    
+    def prevent_conflicting_action(
+        self,
+        action: str,
+        being_state: 'BeingState',
+        priority: ActionPriority
+    ) -> tuple[bool, str]:
+        """
+        Prevent conflicting actions before execution.
+        
+        Phase 3.4: Conflict Prevention
+        
+        Checks for conflicts with:
+        - Current system state (stuck loops, low health, etc.)
+        - Temporal binding state (unclosed loops)
+        - Subsystem recommendations
+        - Recent action history
+        
+        Args:
+            action: Action to check
+            being_state: Current unified state
+            priority: Action priority
+            
+        Returns:
+            (is_allowed, reason) - True if action should proceed
+        """
+        # Check 1: Stuck loop prevention
+        if being_state.stuck_loop_count >= 3:
+            # Only allow actions that break the loop
+            loop_breaking_actions = ['turn_left', 'turn_right', 'jump', 'move_backward']
+            if action not in loop_breaking_actions and priority != ActionPriority.CRITICAL:
+                return (False, f"Stuck loop detected ({being_state.stuck_loop_count} cycles), action '{action}' would continue loop")
+        
+        # Check 2: Temporal coherence check
+        if being_state.temporal_coherence < 0.5 and being_state.unclosed_bindings > 5:
+            # System is losing temporal coherence - be conservative
+            if priority == ActionPriority.LOW:
+                return (False, f"Low temporal coherence ({being_state.temporal_coherence:.2f}), rejecting LOW priority actions")
+        
+        # Check 3: Subsystem conflict detection
+        conflicts = []
+        
+        # Sensorimotor conflict
+        if being_state.is_subsystem_fresh('sensorimotor'):
+            sensorimotor_data = being_state.get_subsystem_data('sensorimotor')
+            if sensorimotor_data.get('status') == 'STUCK':
+                movement_actions = ['move_forward', 'sprint']
+                if action in movement_actions:
+                    conflicts.append("sensorimotor: system is stuck, movement may not work")
+        
+        # Action plan conflict
+        if being_state.is_subsystem_fresh('action_plan'):
+            action_plan_data = being_state.get_subsystem_data('action_plan')
+            planned_action = action_plan_data.get('current')
+            if planned_action and planned_action != action:
+                confidence = action_plan_data.get('confidence', 0.0)
+                if confidence > 0.7 and priority != ActionPriority.CRITICAL:
+                    conflicts.append(f"action_plan: recommends '{planned_action}' (confidence: {confidence:.2f})")
+        
+        # Memory conflict
+        if being_state.is_subsystem_fresh('memory'):
+            memory_data = being_state.get_subsystem_data('memory')
+            recommendations = memory_data.get('recommendations', [])
+            if recommendations and action not in recommendations:
+                if priority == ActionPriority.LOW:
+                    conflicts.append(f"memory: recommends {recommendations}, not '{action}'")
+        
+        # Emotion conflict
+        if being_state.is_subsystem_fresh('emotion'):
+            emotion_data = being_state.get_subsystem_data('emotion')
+            emotion_recs = emotion_data.get('recommendations', [])
+            if emotion_recs and action not in emotion_recs:
+                if being_state.emotion_intensity > 0.8:
+                    conflicts.append(f"emotion: high intensity ({being_state.emotion_intensity:.2f}), recommends {emotion_recs}")
+        
+        # Check 4: Health-based conflicts
+        if hasattr(being_state, 'game_state') and being_state.game_state:
+            health = being_state.game_state.get('health', 100)
+            if health < 20:
+                aggressive_actions = ['attack', 'power_attack', 'sprint']
+                if action in aggressive_actions and priority != ActionPriority.CRITICAL:
+                    conflicts.append(f"health: critical health ({health:.0f}), aggressive action risky")
+        
+        # Evaluate conflicts
+        if conflicts:
+            # CRITICAL actions override all conflicts
+            if priority == ActionPriority.CRITICAL:
+                logger.warning(
+                    f"[ARBITER] CRITICAL action '{action}' proceeding despite conflicts: {conflicts}"
+                )
+                return (True, "CRITICAL priority overrides conflicts")
+            
+            # HIGH priority can override 1-2 conflicts
+            if priority == ActionPriority.HIGH and len(conflicts) <= 2:
+                logger.info(
+                    f"[ARBITER] HIGH priority action '{action}' proceeding with {len(conflicts)} conflicts"
+                )
+                return (True, f"HIGH priority overrides {len(conflicts)} conflicts")
+            
+            # Otherwise, block the action
+            conflict_summary = "; ".join(conflicts)
+            logger.warning(
+                f"[ARBITER] Blocking action '{action}' due to conflicts: {conflict_summary}"
+            )
+            return (False, f"Conflicts detected: {conflict_summary}")
+        
+        return (True, "No conflicts detected")
+    
+    def ensure_temporal_binding_closure(
+        self,
+        being_state: 'BeingState',
+        temporal_tracker: Optional[Any] = None
+    ) -> Dict[str, Any]:
+        """
+        Ensure temporal binding loops close properly.
+        
+        Phase 3.5: Temporal Binding Closure
+        
+        Tracks closure rate and provides recommendations to improve it.
+        Target: >95% closure rate
+        
+        Args:
+            being_state: Current unified state
+            temporal_tracker: Optional temporal coherence tracker
+            
+        Returns:
+            Dict with closure metrics and recommendations
+        """
+        # Get temporal binding stats from BeingState
+        temporal_coherence = being_state.temporal_coherence
+        unclosed_bindings = being_state.unclosed_bindings
+        stuck_loop_count = being_state.stuck_loop_count
+        
+        # Calculate closure rate (inverse of unclosed ratio)
+        # If we have temporal_tracker, use its stats
+        closure_rate = 0.0
+        if temporal_tracker and hasattr(temporal_tracker, 'get_statistics'):
+            stats = temporal_tracker.get_statistics()
+            unclosed_ratio = stats.get('unclosed_ratio', 0.0)
+            closure_rate = 1.0 - unclosed_ratio
+        else:
+            # Estimate from BeingState
+            # Assume we want <5 unclosed bindings for good closure
+            if unclosed_bindings <= 5:
+                closure_rate = 0.95
+            elif unclosed_bindings <= 10:
+                closure_rate = 0.85
+            else:
+                closure_rate = max(0.0, 1.0 - (unclosed_bindings / 20.0))
+        
+        # Determine status
+        status = "EXCELLENT" if closure_rate >= 0.95 else \
+                 "GOOD" if closure_rate >= 0.85 else \
+                 "FAIR" if closure_rate >= 0.70 else \
+                 "POOR"
+        
+        # Generate recommendations
+        recommendations = []
+        
+        if closure_rate < 0.95:
+            recommendations.append("Increase action execution frequency to close loops faster")
+        
+        if unclosed_bindings > 10:
+            recommendations.append(f"High unclosed bindings ({unclosed_bindings}), prioritize loop closure")
+        
+        if stuck_loop_count >= 3:
+            recommendations.append(f"Stuck loop detected ({stuck_loop_count} cycles), force loop-breaking action")
+        
+        if temporal_coherence < 0.7:
+            recommendations.append(f"Low temporal coherence ({temporal_coherence:.2f}), improve perception-action linkage")
+        
+        # Check for stale subsystem data (can prevent loop closure)
+        stale_subsystems = []
+        for subsystem in ['sensorimotor', 'action_plan', 'memory', 'emotion']:
+            if not being_state.is_subsystem_fresh(subsystem, max_age=5.0):
+                age = being_state.get_subsystem_age(subsystem)
+                stale_subsystems.append(f"{subsystem} ({age:.1f}s)")
+        
+        if stale_subsystems:
+            recommendations.append(f"Stale subsystems may prevent closure: {', '.join(stale_subsystems)}")
+        
+        result = {
+            'closure_rate': closure_rate,
+            'status': status,
+            'unclosed_bindings': unclosed_bindings,
+            'temporal_coherence': temporal_coherence,
+            'stuck_loop_count': stuck_loop_count,
+            'recommendations': recommendations,
+            'meets_target': closure_rate >= 0.95
+        }
+        
+        # Log if below target
+        if closure_rate < 0.95:
+            logger.warning(
+                f"[ARBITER] Temporal binding closure below target: "
+                f"{closure_rate:.1%} (target: 95%), "
+                f"unclosed: {unclosed_bindings}, "
+                f"recommendations: {len(recommendations)}"
+            )
+        else:
+            logger.debug(
+                f"[ARBITER] Temporal binding closure: {closure_rate:.1%} ✓"
+            )
+        
+        return result
+    
     async def _notify_callback(self, request_id: str, result: ActionResult):
         """Notify requesting system of result."""
         if request_id in self.callbacks:
@@ -356,5 +710,12 @@ class ActionArbiter:
             print(f"\nTop Rejection Reasons:")
             for reason, count in sorted(stats['rejection_reasons'].items(), key=lambda x: x[1], reverse=True)[:5]:
                 print(f"  {reason}: {count}")
+        
+        if self.enable_gpt5_coordination:
+            print(f"\nGPT-5 Coordination:")
+            print(f"  Coordinated decisions: {self.gpt5_coordination_count}")
+            if self.gpt5_coordination_count > 0:
+                avg_time = self.gpt5_coordination_time / self.gpt5_coordination_count
+                print(f"  Avg coordination time: {avg_time:.2f}s")
         
         print(f"{'='*60}\n")

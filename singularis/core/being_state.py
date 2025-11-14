@@ -215,6 +215,36 @@ class BeingState:
     # Session info
     session_id: Optional[str] = None
     
+    # ═══════════════════════════════════════════════════════════
+    # PHASE 3.1: SUBSYSTEM OUTPUTS (Single Source of Truth)
+    # ═══════════════════════════════════════════════════════════
+    
+    # Sensorimotor subsystem
+    sensorimotor_status: str = "UNKNOWN"  # STUCK, MOVING, IDLE
+    sensorimotor_analysis: str = ""
+    sensorimotor_visual_similarity: float = 0.0
+    sensorimotor_timestamp: float = 0.0
+    
+    # Action planning subsystem
+    action_plan_current: Optional[str] = None
+    action_plan_confidence: float = 0.0
+    action_plan_reasoning: str = ""
+    action_plan_timestamp: float = 0.0
+    
+    # Memory subsystem
+    memory_similar_situations: List[Dict] = field(default_factory=list)
+    memory_recommendations: List[str] = field(default_factory=list)
+    memory_pattern_count: int = 0
+    memory_timestamp: float = 0.0
+    
+    # Emotion subsystem (enhanced)
+    emotion_recommendations: List[str] = field(default_factory=list)
+    emotion_timestamp: float = 0.0
+    
+    # Consciousness subsystem
+    consciousness_conflicts: List[str] = field(default_factory=list)
+    consciousness_timestamp: float = 0.0
+    
     def __repr__(self) -> str:
         """Human-readable representation."""
         return f"""BeingState(
@@ -271,5 +301,102 @@ class BeingState:
                 'stuck_loops': self.stuck_loop_count
             },
             'action': self.last_action,
-            'goal': self.current_goal
+            'goal': self.current_goal,
+            # Phase 3.1: Subsystem outputs
+            'subsystems': {
+                'sensorimotor': {
+                    'status': self.sensorimotor_status,
+                    'analysis': self.sensorimotor_analysis,
+                    'visual_similarity': self.sensorimotor_visual_similarity,
+                    'age': time.time() - self.sensorimotor_timestamp if self.sensorimotor_timestamp > 0 else 999
+                },
+                'action_plan': {
+                    'current': self.action_plan_current,
+                    'confidence': self.action_plan_confidence,
+                    'reasoning': self.action_plan_reasoning,
+                    'age': time.time() - self.action_plan_timestamp if self.action_plan_timestamp > 0 else 999
+                },
+                'memory': {
+                    'pattern_count': self.memory_pattern_count,
+                    'similar_situations': len(self.memory_similar_situations),
+                    'recommendations': self.memory_recommendations,
+                    'age': time.time() - self.memory_timestamp if self.memory_timestamp > 0 else 999
+                },
+                'emotion': {
+                    'primary': self.primary_emotion,
+                    'intensity': self.emotion_intensity,
+                    'recommendations': self.emotion_recommendations,
+                    'age': time.time() - self.emotion_timestamp if self.emotion_timestamp > 0 else 999
+                }
+            }
         }
+    
+    def update_subsystem(self, subsystem: str, data: Dict[str, Any]):
+        """
+        Update subsystem data with timestamp.
+        
+        Phase 3.1: Central method for subsystems to write their outputs
+        
+        Args:
+            subsystem: Name of subsystem (e.g., 'sensorimotor', 'action_plan', 'memory', 'emotion')
+            data: Dict of field_name: value pairs
+        """
+        timestamp_field = f"{subsystem}_timestamp"
+        setattr(self, timestamp_field, time.time())
+        
+        for key, value in data.items():
+            field_name = f"{subsystem}_{key}"
+            if hasattr(self, field_name):
+                setattr(self, field_name, value)
+    
+    def get_subsystem_age(self, subsystem: str) -> float:
+        """
+        Get age of subsystem data in seconds.
+        
+        Args:
+            subsystem: Name of subsystem
+            
+        Returns:
+            Age in seconds (999 if never updated)
+        """
+        timestamp_field = f"{subsystem}_timestamp"
+        timestamp = getattr(self, timestamp_field, 0.0)
+        if timestamp == 0.0:
+            return 999.0
+        return time.time() - timestamp
+    
+    def is_subsystem_fresh(self, subsystem: str, max_age: float = 5.0) -> bool:
+        """
+        Check if subsystem data is fresh.
+        
+        Args:
+            subsystem: Name of subsystem
+            max_age: Maximum age in seconds (default 5.0)
+            
+        Returns:
+            True if fresh, False if stale
+        """
+        return self.get_subsystem_age(subsystem) < max_age
+    
+    def get_subsystem_data(self, subsystem: str) -> Dict[str, Any]:
+        """
+        Get all data for a subsystem.
+        
+        Args:
+            subsystem: Name of subsystem
+            
+        Returns:
+            Dict with all subsystem fields
+        """
+        result = {}
+        prefix = f"{subsystem}_"
+        
+        for attr_name in dir(self):
+            if attr_name.startswith(prefix) and not attr_name.endswith('_timestamp'):
+                field_name = attr_name[len(prefix):]
+                result[field_name] = getattr(self, attr_name)
+        
+        result['age'] = self.get_subsystem_age(subsystem)
+        result['is_fresh'] = self.is_subsystem_fresh(subsystem)
+        
+        return result

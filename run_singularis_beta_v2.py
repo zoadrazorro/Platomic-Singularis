@@ -15,7 +15,7 @@ Run with:
     python run_singularis_beta_v2.py --duration 3600 --mode async
 
 Author: Singularis Team
-Version: 2.0.0-beta
+Version: 2.3.0-beta
 Date: 2025-11-13
 """
 
@@ -48,16 +48,19 @@ def print_banner():
 ║   ███████║██║██║ ╚████║╚██████╔╝╚██████╔╝███████╗██║  ██║██║  ██║██║███████║   ║
 ║   ╚══════╝╚═╝╚═╝  ╚═══╝ ╚═════╝  ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚══════╝   ║
 ║                                                                  ║
-║                          BETA v2.0                               ║
+║                         BETA v2.3                                ║
 ║              "One Being, Striving for Coherence"                 ║
+║          Research • Philosophy • MetaCognition                   ║
 ║                                                                  ║
 ╚══════════════════════════════════════════════════════════════════╝
 
-    Architecture:  BeingState + CoherenceEngine
-    Philosophy:    Spinoza → IIT → Lumen → Buddhism
+    Architecture:  BeingState + CoherenceEngine + GPT-5 Orchestrator
+    Philosophy:    Spinoza → IIT → Lumen → Buddhism + Philosophy Agent
     Mathematics:   C: B → [0,1], max E[C(B(t+1))]
-    Integration:   20+ Subsystems → 1 Unified Being
-    Validation:    Wolfram Alpha Telemetry
+    Integration:   50+ Subsystems → 1 Unified Being
+    Research:      Perplexity AI (Skyrim best practices)
+    MetaCognition: OpenRouter (GPT-4o + DeepSeek planning)
+    Validation:    Wolfram Alpha Telemetry + Main Brain GPT-4o Reports
     
 """
     print(banner)
@@ -72,6 +75,10 @@ def check_environment():
     
     optional_vars = {
         'ANTHROPIC_API_KEY': 'Anthropic Claude API (optional)',
+        'PERPLEXITY_API_KEY': 'Perplexity AI (optional - for research advisor)',
+        'OPENROUTER_API_KEY': 'OpenRouter (optional - for metacognition)',
+        'GITHUB_TOKEN': 'GitHub Token (optional - fallback for OpenRouter)',
+        'HYPERBOLIC_API_KEY': 'Hyperbolic API (optional - for Qwen3-235B)',
     }
     
     missing_required = []
@@ -155,8 +162,12 @@ def load_config(args) -> 'SkyrimConfig':
     print(f"  Voice enabled: {config.enable_voice}")
     print(f"  Video enabled: {config.enable_video_interpreter}")
     print(f"  GPT-5 orchestrator: {config.use_gpt5_orchestrator}")
+    print(f"  Double Helix: {config.use_double_helix}")
     print(f"  Wolfram telemetry: Always enabled (every 20 cycles)")
     print(f"  Verbose mode: {config.gpt5_verbose}")
+    print(f"  Research Advisor: {'Enabled' if os.getenv('PERPLEXITY_API_KEY') else 'Disabled (no API key)'}")
+    print(f"  MetaCognition: {'Enabled' if (os.getenv('OPENROUTER_API_KEY') or os.getenv('GITHUB_TOKEN')) else 'Disabled (no API key)'}")
+    print(f"  Philosophy Agent: Always enabled (local texts)")
     
     print("[CONFIG] ✓ Configuration loaded\n")
     return config
@@ -195,7 +206,33 @@ async def run_async_mode(duration: int, config: 'SkyrimConfig'):
     
     print("[VERIFY] ✓ BeingState initialized")
     print("[VERIFY] ✓ CoherenceEngine initialized")
-    print("[VERIFY] ✓ Metaphysical center operational\n")
+    print("[VERIFY] ✓ Metaphysical center operational")
+    
+    # Verify new systems
+    if hasattr(agi, 'research_advisor'):
+        if agi.research_advisor.client.is_available():
+            print("[VERIFY] ✓ Research Advisor (Perplexity) initialized")
+        else:
+            print("[VERIFY] - Research Advisor disabled (no PERPLEXITY_API_KEY)")
+    
+    if hasattr(agi, 'metacog_advisor'):
+        if agi.metacog_advisor.client.is_available():
+            print("[VERIFY] ✓ MetaCognition Advisor (OpenRouter) initialized")
+        else:
+            print("[VERIFY] - MetaCognition Advisor disabled (no OPENROUTER_API_KEY or GITHUB_TOKEN)")
+    
+    if hasattr(agi, 'gpt5_orchestrator') and agi.gpt5_orchestrator:
+        num_systems = len(agi.gpt5_orchestrator.registered_systems)
+        print(f"[VERIFY] ✓ GPT-5 Orchestrator initialized ({num_systems} systems registered)")
+    
+    if hasattr(agi, 'double_helix') and agi.double_helix:
+        helix_stats = agi.double_helix.get_stats()
+        print(f"[VERIFY] ✓ Double Helix initialized ({helix_stats.get('total_nodes', 0)} nodes)")
+    
+    if hasattr(agi, 'main_brain') and agi.main_brain:
+        print(f"[VERIFY] ✓ Main Brain initialized (session: {agi.main_brain.session_id})")
+    
+    print()
     
     # Start autonomous play
     print("[START] Beginning autonomous gameplay...\n")
@@ -223,11 +260,18 @@ async def run_async_mode(duration: int, config: 'SkyrimConfig'):
             print(f"  C_global: {agi.being_state.global_coherence:.3f}")
             
             if agi.being_state.lumina:
+                balance = agi.being_state.lumina.balance_score()
                 print(f"  Lumina: (ℓₒ={agi.being_state.lumina.ontic:.3f}, "
                       f"ℓₛ={agi.being_state.lumina.structural:.3f}, "
                       f"ℓₚ={agi.being_state.lumina.participatory:.3f})")
+                print(f"  Lumina Balance: {balance:.3f}")
             
+            print(f"  Consciousness: 𝒞={agi.being_state.coherence_C:.3f}, Φ̂={agi.being_state.phi_hat:.3f}")
+            print(f"  Temporal Coherence: {agi.being_state.temporal_coherence:.3f}")
+            print(f"  Emotion: {agi.being_state.primary_emotion} (intensity={agi.being_state.emotion_intensity:.2f})")
             print(f"  Spiral Stage: {agi.being_state.spiral_stage}")
+            print(f"  Goal: {agi.being_state.current_goal}")
+            print(f"  Last Action: {agi.being_state.last_action}")
         
         if hasattr(agi, 'coherence_engine'):
             stats = agi.coherence_engine.get_stats()

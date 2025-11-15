@@ -1,17 +1,17 @@
 {
-  "cycle": 9,
-  "elapsed": 40.33151984214783,
+  "cycle": 405,
+  "elapsed": 2193.2666969299316,
   "stats": {
-    "total_actions": 8,
-    "successful_actions": 8,
+    "total_actions": 404,
+    "successful_actions": 404,
     "rejected_actions": 0,
     "conflicts_prevented": 0,
-    "gpt5_coordinations": 8,
+    "gpt5_coordinations": 404,
     "temporal_closure_rate": 1.0
   },
   "being_state": {
-    "timestamp": 1763150875.4713886,
-    "cycle": 9,
+    "timestamp": 1763154444.5874732,
+    "cycle": 405,
     "global_coherence": 0.85,
     "lumina": {
       "ontic": 0.0,

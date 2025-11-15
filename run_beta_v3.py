@@ -251,8 +251,9 @@ class BetaV3System:
         self.cycle_count += 1
         self.being_state.cycle_number = self.cycle_count
         
-        # Update subsystems (mock data for test mode)
+        # Update subsystems
         if self.config.test_mode:
+            # Mock data for test mode
             self.being_state.update_subsystem('sensorimotor', {
                 'status': 'MOVING' if self.cycle_count % 3 != 0 else 'IDLE',
                 'analysis': f'Cycle {self.cycle_count}',
@@ -270,6 +271,73 @@ class BetaV3System:
                 'similar_situations': [],
                 'recommendations': ['move_forward', 'explore']
             })
+        else:
+            # Production mode - run SkyrimAGI perception and update being_state
+            if self.skyrim_agi:
+                try:
+                    # Run perception to get current game state
+                    perception = await self.skyrim_agi.perception.perceive()
+                    game_state = perception.get('game_state', {})
+                    
+                    # Update sensorimotor subsystem
+                    if hasattr(self.skyrim_agi, 'sensorimotor_state'):
+                        self.skyrim_agi.sensorimotor_state = {
+                            'status': 'ACTIVE',
+                            'analysis': perception.get('scene_description', ''),
+                            'visual_similarity': perception.get('visual_similarity', 0.0)
+                        }
+                        self.being_state.update_subsystem('sensorimotor', self.skyrim_agi.sensorimotor_state)
+                    
+                    # Update action planning (will be updated when action is selected)
+                    
+                    # Update memory subsystem
+                    if hasattr(self.skyrim_agi, 'hierarchical_memory') and self.skyrim_agi.hierarchical_memory:
+                        try:
+                            patterns = self.skyrim_agi.hierarchical_memory.get_semantic_patterns()
+                            self.being_state.update_subsystem('memory', {
+                                'pattern_count': len(patterns),
+                                'similar_situations': patterns[-5:] if patterns else [],
+                                'recommendations': []
+                            })
+                        except Exception as e:
+                            logger.debug(f"Memory update skipped: {e}")
+                    
+                    # Update emotion subsystem
+                    if hasattr(self.skyrim_agi, 'emotion_integration') and self.skyrim_agi.emotion_integration:
+                        try:
+                            emotion_state = self.skyrim_agi.emotion_integration.emotion_state
+                            if emotion_state:
+                                recommendations = []
+                                if hasattr(self.skyrim_agi.emotion_integration, 'get_action_recommendations'):
+                                    recommendations = self.skyrim_agi.emotion_integration.get_action_recommendations()
+                                
+                                self.being_state.update_subsystem('emotion', {
+                                    'primary': emotion_state.primary_emotion.value if hasattr(emotion_state.primary_emotion, 'value') else str(emotion_state.primary_emotion),
+                                    'intensity': emotion_state.intensity,
+                                    'recommendations': recommendations
+                                })
+                        except Exception as e:
+                            logger.debug(f"Emotion update skipped: {e}")
+                    
+                    # Update consciousness metrics
+                    if hasattr(self.skyrim_agi, 'current_consciousness') and self.skyrim_agi.current_consciousness:
+                        consciousness = self.skyrim_agi.current_consciousness
+                        self.being_state.coherence_C = consciousness.coherence
+                        self.being_state.phi_hat = consciousness.consciousness_level
+                        self.being_state.lumina.ontic = consciousness.coherence_ontical
+                        self.being_state.lumina.structural = consciousness.coherence_structural
+                        self.being_state.lumina.participatory = consciousness.coherence_participatory
+                    
+                    logger.debug(f"[BETA_V3] Updated being_state from SkyrimAGI (cycle {self.cycle_count})")
+                    
+                except Exception as e:
+                    logger.warning(f"[BETA_V3] Could not update from SkyrimAGI: {e}")
+                    # Fall back to minimal updates
+                    self.being_state.update_subsystem('sensorimotor', {
+                        'status': 'UNKNOWN',
+                        'analysis': f'Cycle {self.cycle_count}',
+                        'visual_similarity': 0.0
+                    })
         
         # Gather candidate actions (using real low-level action names)
         # These map 1:1 with SkyrimActions methods

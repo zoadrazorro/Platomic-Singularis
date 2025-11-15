@@ -1,17 +1,17 @@
 {
-  "cycle": 24,
-  "elapsed": 123.13041687011719,
+  "cycle": 67,
+  "elapsed": 338.34765338897705,
   "stats": {
-    "total_actions": 24,
-    "successful_actions": 24,
+    "total_actions": 66,
+    "successful_actions": 66,
     "rejected_actions": 0,
     "conflicts_prevented": 0,
-    "gpt5_coordinations": 24,
+    "gpt5_coordinations": 67,
     "temporal_closure_rate": 1.0
   },
   "being_state": {
-    "timestamp": 1763157241.021357,
-    "cycle": 24,
+    "timestamp": 1763170222.3532095,
+    "cycle": 67,
     "global_coherence": 0.85,
     "lumina": {
       "ontic": 0.0,
@@ -57,7 +57,7 @@
         "status": "ACTIVE",
         "analysis": "",
         "visual_similarity": 0.0,
-        "age": 7.186518669128418
+        "age": 2.200085163116455
       },
       "action_plan": {
         "current": null,

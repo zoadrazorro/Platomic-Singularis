@@ -123,6 +123,9 @@ class MainOrchestrator:
         self.fitbit: Optional[FitbitHealthAdapter] = None
         self.roku_gateway: Optional[RokuScreenCaptureGateway] = None
         
+        # Life Ops components
+        self.life_query_handler = None
+        
         # User profiles
         self.user_profiles: Dict[str, UserProfile] = {}
         
@@ -174,6 +177,17 @@ class MainOrchestrator:
         )
         logger.info("[ORCHESTRATOR] ✅ Pattern Engine ↔ AGI Arbiter + Emergency Validator connected!")
         
+        # 🔗 PHASE 5: Initialize Life Query Handler
+        from singularis.life_ops import LifeQueryHandler
+        
+        logger.info("[ORCHESTRATOR] Initializing Life Query Handler (Natural language queries)...")
+        self.life_query_handler = LifeQueryHandler(
+            consciousness=self.consciousness,
+            timeline=self.timeline,
+            pattern_engine=self.pattern_engine
+        )
+        logger.info("[ORCHESTRATOR] ✅ Life Query Handler initialized!")
+        
         logger.info("[ORCHESTRATOR] Initializing continual learner...")
         self.learner = ContinualLearner(
             embedding_dim=512,
@@ -189,9 +203,10 @@ class MainOrchestrator:
             )
             await self.messenger.initialize()
             
-            # Share consciousness and learner
+            # Share consciousness, learner, and life query handler
             self.messenger.consciousness = self.consciousness
             self.messenger.learner = self.learner
+            self.messenger.life_query_handler = self.life_query_handler
         else:
             logger.warning("[ORCHESTRATOR] Messenger token not set, skipping")
         
@@ -656,13 +671,54 @@ async def get_user_profile(user_id: str):
     return orchestrator.user_profiles[user_id].to_dict()
 
 
+@app.post("/query")
+async def life_query(user_id: str, query: str):
+    """
+    Query life data using natural language.
+    
+    POST /query
+    {
+        "user_id": "user123",
+        "query": "How did I sleep last week?"
+    }
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=500, detail="Orchestrator not initialized")
+    
+    if not orchestrator.life_query_handler:
+        raise HTTPException(status_code=503, detail="Query handler not available")
+    
+    try:
+        result = await orchestrator.life_query_handler.handle_query(user_id, query)
+        
+        return {
+            'query': result.query,
+            'response': result.response,
+            'confidence': result.confidence,
+            'data_sources': result.data_sources,
+            'event_count': result.event_count,
+            'pattern_count': result.pattern_count,
+            'timestamp': result.timestamp.isoformat(),
+            'metadata': result.metadata
+        }
+    except Exception as e:
+        logger.error(f"[API] Query failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Query processing failed: {str(e)}")
+
+
 @app.get("/stats")
 async def get_stats():
     """Get orchestrator statistics."""
     if not orchestrator:
         raise HTTPException(status_code=500, detail="Orchestrator not initialized")
     
-    return orchestrator.get_stats()
+    stats = orchestrator.get_stats()
+    
+    # Add query handler stats
+    if orchestrator.life_query_handler:
+        stats['life_query_handler'] = orchestrator.life_query_handler.get_stats()
+    
+    return stats
 
 
 @app.get("/health")
@@ -671,7 +727,8 @@ async def health_check():
     return {
         "status": "ok",
         "timestamp": datetime.now().isoformat(),
-        "orchestrator_initialized": orchestrator is not None
+        "orchestrator_initialized": orchestrator is not None,
+        "query_handler_available": orchestrator.life_query_handler is not None if orchestrator else False
     }
 
 

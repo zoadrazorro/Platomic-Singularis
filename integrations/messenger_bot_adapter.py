@@ -255,6 +255,39 @@ class MessengerBotAdapter:
         Returns:
             Response text
         """
+        # 🔍 PHASE 5: Check if this is a life query
+        life_keywords = [
+            'sleep', 'slept', 'sleeping', 'exercise', 'workout', 'steps',
+            'heart rate', 'health', 'pattern', 'routine', 'habit',
+            'how did i', 'am i', 'why am i', 'what patterns'
+        ]
+        
+        message_lower = message.message_text.lower()
+        is_life_query = any(keyword in message_lower for keyword in life_keywords)
+        
+        # Route to Life Query Handler if applicable
+        if is_life_query and hasattr(self, 'life_query_handler') and self.life_query_handler:
+            try:
+                logger.info(f"[MESSENGER-BOT] Routing to Life Query Handler: '{message.message_text}'")
+                
+                query_result = await self.life_query_handler.handle_query(
+                    sender_id,
+                    message.message_text
+                )
+                
+                logger.info(
+                    f"[MESSENGER-BOT] Life query response "
+                    f"(confidence: {query_result.confidence:.3f}, "
+                    f"events: {query_result.event_count}, "
+                    f"patterns: {query_result.pattern_count})"
+                )
+                
+                return query_result.response
+                
+            except Exception as e:
+                logger.warning(f"[MESSENGER-BOT] Life query failed, falling back to normal: {e}")
+                # Fall through to normal processing
+        
         # Build context from user history
         user_context = self._build_user_context(sender_id)
         

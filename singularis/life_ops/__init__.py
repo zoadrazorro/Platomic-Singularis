@@ -7,6 +7,7 @@ Bridges Life Timeline data with Singularis AGI consciousness.
 from .life_timeline_bridge import LifeTimelineBridge
 from .agi_pattern_arbiter import AGIPatternArbiter, PatternInterpretation
 from .agi_intervention_decider import AGIInterventionDecider, InterventionDecision as AGIInterventionDecision
+from .life_query_handler import LifeQueryHandler, QueryResult
 
 __all__ = [
     'LifeTimelineBridge',
@@ -14,4 +15,6 @@ __all__ = [
     'PatternInterpretation',
     'AGIInterventionDecider',
     'AGIInterventionDecision',
+    'LifeQueryHandler',
+    'QueryResult',
 ]

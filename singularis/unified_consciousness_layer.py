@@ -48,6 +48,15 @@ from loguru import logger
 from .llm.openai_client import OpenAIClient
 from .core.runtime_flags import LOCAL_ONLY_LLM
 
+# Meta-MoE Router with ExpertArbiter
+try:
+    from .llm.meta_moe_router import MetaMoERouter
+    from .llm.expert_arbiter import ExpertArbiter
+    META_MOE_AVAILABLE = True
+except ImportError:
+    META_MOE_AVAILABLE = False
+    logger.warning("Meta-MoE Router not available")
+
 # DATA system integration
 try:
     from .data import DATASystem
@@ -134,6 +143,11 @@ class UnifiedConsciousnessLayer:
         nano_max_tokens: int = 2048,
         openai_base_url: Optional[str] = None,
         local_only: Optional[bool] = None,
+        # Meta-MoE configuration
+        use_meta_moe: bool = False,
+        cygnus_ip: Optional[str] = None,
+        macbook_ip: Optional[str] = None,
+        enable_macbook_fallback: bool = False,
     ):
         """
         Initialize unified consciousness layer.
@@ -200,14 +214,43 @@ class UnifiedConsciousnessLayer:
         
         # Life Timeline Bridge (optional)
         self.life_timeline_bridge: Optional[Any] = None
+        
+        # Meta-MoE Router with ExpertArbiter (optional)
+        self.meta_moe_router: Optional[MetaMoERouter] = None
+        self.expert_arbiter: Optional[ExpertArbiter] = None
+        self.use_meta_moe = use_meta_moe
+        
+        if use_meta_moe and META_MOE_AVAILABLE and cygnus_ip:
+            # Initialize ExpertArbiter with consciousness layer for meta-reasoning
+            self.expert_arbiter = ExpertArbiter(
+                consciousness_layer=self,  # Pass self for meta-reasoning
+                enable_learning=True  # Enable continuous learning
+            )
+            
+            # Initialize Meta-MoE Router
+            self.meta_moe_router = MetaMoERouter(
+                cygnus_ip=cygnus_ip,
+                macbook_ip=macbook_ip,
+                enable_macbook_fallback=enable_macbook_fallback
+            )
+            
+            # Connect arbiter to router for continuous memory
+            self.meta_moe_router.arbiter = self.expert_arbiter
+            
+            logger.info(
+                f"[CONSCIOUSNESS] Meta-MoE enabled | "
+                f"Cygnus: {cygnus_ip} | "
+                f"ExpertArbiter: ✓ (with continuous learning)"
+            )
 
         # Log initialization
         mode_desc = "LOCAL-ONLY" if self.local_only else "CLOUD or LOCAL"
         endpoint_desc = self.openai_base_url if self.openai_base_url else "OpenAI Cloud API"
+        moe_desc = "Meta-MoE (Cygnus)" if use_meta_moe else "GPT-5 Nano Experts"
         
         logger.info(
             f"Unified Consciousness Layer initialized: GPT-5 ({gpt5_model}) + "
-            f"5 GPT-5-nano experts ({gpt5_nano_model}) | "
+            f"{moe_desc} | "
             f"Mode: {mode_desc} | Endpoint: {endpoint_desc}"
         )
 

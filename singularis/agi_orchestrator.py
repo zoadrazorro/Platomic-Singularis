@@ -91,6 +91,12 @@ class AGIConfig:
     gpt5_nano_model: str = "gpt-5-nano-2025-08-07"
     gpt5_temperature: float = 0.8
     gpt5_nano_temperature: float = 0.7
+    
+    # Meta-MoE Configuration (Cygnus cluster)
+    use_meta_moe: bool = False  # Enable Meta-MoE routing to Cygnus
+    cygnus_ip: str = "192.168.1.50"  # Cygnus (AMD 2x7900XT) IP
+    macbook_ip: Optional[str] = "192.168.1.100"  # MacBook Pro (secondary inference)
+    enable_macbook_fallback: bool = False  # Use MacBook as fallback
 
     # Emotion System (HuiHui)
     use_emotion_system: bool = True
@@ -227,12 +233,23 @@ class AGIOrchestrator:
                     gpt5_nano_model=self.config.gpt5_nano_model,
                     gpt5_temperature=self.config.gpt5_temperature,
                     nano_temperature=self.config.gpt5_nano_temperature,
-                    # Route to local LM Studio endpoint (MacBook Pro inference server)
+                    # Route to local LM Studio endpoint (Router or Cygnus)
                     openai_base_url=self.config.lm_studio_url,
                     local_only=True,  # Enforce local-only mode for LifeOps
+                    # Meta-MoE configuration (Cygnus cluster)
+                    use_meta_moe=self.config.use_meta_moe,
+                    cygnus_ip=self.config.cygnus_ip,
+                    macbook_ip=self.config.macbook_ip,
+                    enable_macbook_fallback=self.config.enable_macbook_fallback,
                 )
-                print(f"[OK] Unified consciousness layer ready (GPT-5 + 5 GPT-5-nano experts)")
-                print(f"     Mode: LOCAL-ONLY | Endpoint: {self.config.lm_studio_url}")
+                
+                if self.config.use_meta_moe:
+                    print(f"[OK] Unified consciousness layer ready (Meta-MoE + ExpertArbiter)")
+                    print(f"     Mode: LOCAL-ONLY | Cygnus: {self.config.cygnus_ip}")
+                    print(f"     ExpertArbiter: ✓ (continuous learning enabled)")
+                else:
+                    print(f"[OK] Unified consciousness layer ready (GPT-5 + 5 GPT-5-nano experts)")
+                    print(f"     Mode: LOCAL-ONLY | Endpoint: {self.config.lm_studio_url}")
             except Exception as e:
                 print(f"[WARNING] Unified consciousness layer initialization failed: {e}")
                 print("  Continuing without unified consciousness layer")

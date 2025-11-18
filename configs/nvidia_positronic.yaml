@@ -1,0 +1,60 @@
+# NVIDIA Laptop Positronic Network Configuration
+# RTX 5060 8GB - Abductive reasoning and hypothesis generation
+
+device: "nvidia"
+ip: "192.168.1.101"
+gpu: "RTX 5060"
+vram: "8GB"
+
+positronic_network:
+  port: 4000
+  description: "Abductive Positronic Network for hypothesis generation"
+  
+  nodes: 512
+  modules: 5  # One per HypothesisType
+  topology: "HYBRID"
+  
+  hypothesis_types:
+    - CAUSAL        # Cause-effect relationships
+    - DIAGNOSTIC    # Symptom → diagnosis
+    - PREDICTIVE    # Current → future state
+    - EXPLANATORY   # Observation → explanation
+    - COUNTERFACTUAL  # What-if scenarios
+  
+  activation:
+    threshold: 0.5
+    decay_rate: 0.9
+    propagation_steps: 10
+  
+  hypothesis_generation:
+    max_hypotheses: 10
+    min_confidence: 0.3
+    max_depth: 5  # For causal chains
+    beam_width: 5
+  
+  scoring:
+    confidence_weight: 0.4
+    plausibility_weight: 0.3
+    novelty_weight: 0.3
+  
+  device: "cuda"
+  dtype: "float32"
+  vram_usage: "~6GB"
+
+# LLM integration (optional, for production)
+llm_integration:
+  enabled: false  # Set to true for production
+  model: "local-llm"
+  endpoint: "http://192.168.1.100:2000/v1"  # MacBook MoE
+  use_for_generation: true
+  fallback_to_template: true
+
+# Resource limits
+resources:
+  vram_limit: "6GB"
+  batch_size: 32
+  max_concurrent_hypotheses: 50
+
+startup:
+  preload_network: true
+  warm_up_iterations: 10

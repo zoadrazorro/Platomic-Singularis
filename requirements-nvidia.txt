@@ -1,0 +1,19 @@
+# NVIDIA Laptop Requirements (RTX 5060 8GB)
+# Abductive Positronic Network
+
+# Core
+# singularis-core>=5.0.0
+
+# PyTorch with CUDA support
+# Install with: pip install torch --index-url https://download.pytorch.org/whl/cu121
+torch>=2.1.0
+numpy>=1.24.0
+
+# Positronic Network specific
+networkx>=3.0
+loguru>=0.7.0
+pyyaml>=6.0
+
+# Optional: For monitoring
+psutil>=5.9.0
+aiohttp>=3.9.0

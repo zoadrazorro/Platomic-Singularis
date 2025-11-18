@@ -1,0 +1,13 @@
+# Cygnus Device Requirements (AMD 2x7900XT)
+# Minimal dependencies - just for expert model serving
+
+# Core (will be installed from singularis-core package)
+# singularis-core>=5.0.0
+
+# LM Studio handles model serving, so minimal Python deps
+pyyaml>=6.0
+loguru>=0.7.0
+aiohttp>=3.9.0
+
+# Optional: For monitoring
+psutil>=5.9.0

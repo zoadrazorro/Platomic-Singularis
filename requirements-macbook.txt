@@ -1,0 +1,21 @@
+# MacBook Pro M3 Requirements (Orchestra Mode)
+# Large MoE + AURA-Brain bio-simulator
+
+# Core
+# singularis-core>=5.0.0
+
+# PyTorch with Metal support
+torch>=2.1.0
+numpy>=1.24.0
+scipy>=1.11.0
+
+# AURA-Brain specific
+networkx>=3.0
+loguru>=0.7.0
+
+# Optional: For monitoring
+psutil>=5.9.0
+pyyaml>=6.0
+
+# LM Studio for Large MoE (external)
+aiohttp>=3.9.0  # For API calls

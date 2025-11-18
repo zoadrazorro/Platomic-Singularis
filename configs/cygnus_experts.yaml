@@ -1,0 +1,118 @@
+# Cygnus Expert Configuration
+# 10 specialized 4B experts on AMD 2x7900XT (48GB VRAM)
+
+device: "cygnus"
+ip: "192.168.1.50"
+gpu: "AMD 2x7900XT"
+vram: "48GB"
+
+experts:
+  vision:
+    port: 1234
+    model: "Qwen2-VL-4B"
+    domain: "VISION"
+    description: "Visual understanding, image analysis, OCR"
+    context_length: 8192
+    quantization: "Q4_K_M"
+    vram_usage: "~4GB"
+    
+  logic:
+    port: 1235
+    model: "DeepSeek-Coder-4B"
+    domain: "LOGIC"
+    description: "Symbolic logic, code analysis, formal reasoning"
+    context_length: 16384
+    quantization: "Q4_K_M"
+    vram_usage: "~4GB"
+    
+  memory:
+    port: 1236
+    model: "Phi-4-mini"
+    domain: "MEMORY"
+    description: "Memory retrieval, pattern matching, context recall"
+    context_length: 8192
+    quantization: "Q4_K_M"
+    vram_usage: "~4GB"
+    
+  action:
+    port: 1237
+    model: "TinyLlama-4B"
+    domain: "ACTION"
+    description: "Action planning, decision making, execution"
+    context_length: 4096
+    quantization: "Q4_K_M"
+    vram_usage: "~4GB"
+    
+  emotion:
+    port: 1238
+    model: "EmotiLLM-4B"
+    domain: "EMOTION"
+    description: "Emotional intelligence, empathy, sentiment"
+    context_length: 8192
+    quantization: "Q4_K_M"
+    vram_usage: "~4GB"
+    
+  reasoning:
+    port: 1239
+    model: "Mistral-4B"
+    domain: "REASONING"
+    description: "General reasoning, inference, problem solving"
+    context_length: 8192
+    quantization: "Q4_K_M"
+    vram_usage: "~4GB"
+    
+  planning:
+    port: 1240
+    model: "CodeLlama-4B"
+    domain: "PLANNING"
+    description: "Strategic planning, goal decomposition"
+    context_length: 16384
+    quantization: "Q4_K_M"
+    vram_usage: "~4GB"
+    
+  language:
+    port: 1241
+    model: "Llama3.2-4B"
+    domain: "LANGUAGE"
+    description: "Natural language understanding, generation"
+    context_length: 8192
+    quantization: "Q4_K_M"
+    vram_usage: "~4GB"
+    
+  analysis:
+    port: 1242
+    model: "Phi-4-data"
+    domain: "ANALYSIS"
+    description: "Data analysis, statistics, insights"
+    context_length: 8192
+    quantization: "Q4_K_M"
+    vram_usage: "~4GB"
+    
+  synthesis:
+    port: 1243
+    model: "Yi-4B"
+    domain: "SYNTHESIS"
+    description: "Response synthesis, integration, coherence"
+    context_length: 8192
+    quantization: "Q4_K_M"
+    vram_usage: "~4GB"
+
+# Total VRAM: ~40GB (fits in 48GB with headroom)
+
+lm_studio:
+  bind_address: "0.0.0.0"  # Allow network access
+  gpu_layers: -1  # Full offload
+  threads: 8
+  batch_size: 512
+  
+startup_order:
+  - vision
+  - logic
+  - memory
+  - action
+  - emotion
+  - reasoning
+  - planning
+  - language
+  - analysis
+  - synthesis

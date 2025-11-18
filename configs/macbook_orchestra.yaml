@@ -1,0 +1,86 @@
+# MacBook Pro M3 Orchestra Mode Configuration
+# Runs Large MoE + AURA-Brain in parallel (18GB RAM split)
+
+device: "macbook"
+ip: "192.168.1.100"
+chip: "M3 Pro"
+ram: "18GB"
+mode: "orchestra"  # Both MoE and AURA run simultaneously
+
+large_moe:
+  port: 2000
+  model: "Qwen2.5-14B-MoE"  # or Mixtral-8x7B
+  description: "Large MoE for deep reasoning"
+  context_length: 32768
+  quantization: "Q4_K_M"
+  ram_usage: "~9GB"
+  gpu_layers: -1  # Full Metal offload
+  threads: 8
+  batch_size: 512
+  
+  # Alternative models
+  alternatives:
+    - name: "Mixtral-8x7B"
+      ram: "~9GB"
+      context: 32768
+    - name: "Qwen2.5-14B"
+      ram: "~8GB"
+      context: 32768
+
+aura_brain:
+  port: 3000
+  description: "AURA-Brain Bio-Simulator"
+  ram_usage: "~9GB"
+  
+  neurons: 1024
+  modules: 8
+  topology: "HYBRID"  # Scale-free + small-world + modular
+  
+  neuromodulators:
+    - dopamine
+    - serotonin
+    - norepinephrine
+    - acetylcholine
+  
+  learning:
+    stdp_enabled: true
+    hebbian_rate: 0.01
+    decay_rate: 0.95
+  
+  sparsity:
+    target: 0.95
+    activation_threshold: 0.3
+  
+  device: "mps"  # Metal Performance Shaders
+  dtype: "float32"
+
+orchestra_mode:
+  enabled: true
+  parallel_processing: true
+  
+  # Routing strategy
+  routing:
+    simple_queries: "cygnus_only"  # Fast 4B experts
+    complex_queries: "cygnus_moe"  # Cygnus + MoE
+    emotional_queries: "cygnus_aura"  # Cygnus + AURA
+    critical_queries: "all_three"  # Cygnus + MoE + AURA
+  
+  # Response weighting
+  weights:
+    cygnus: 0.4  # Symbolic/logical
+    moe: 0.4     # Deep reasoning
+    aura: 0.2    # Biological/emotional
+  
+  # Synthesis
+  synthesis_method: "weighted_average"
+  confidence_threshold: 0.5
+
+# Resource allocation
+resources:
+  moe_ram: "9GB"
+  aura_ram: "9GB"
+  system_ram: "~2GB"  # OS + overhead
+  
+startup_order:
+  - large_moe
+  - aura_brain

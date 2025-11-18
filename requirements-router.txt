@@ -1,0 +1,29 @@
+# Router Device Requirements (AMD 6900XT)
+# UnifiedConsciousnessLayer + Meta-MoE + DATA-Brain + LifeOps
+
+# Core
+# singularis-core>=5.0.0
+
+# LLM clients
+openai>=1.0.0
+aiohttp>=3.9.0
+
+# Networking
+networkx>=3.0
+numpy>=1.24.0
+scipy>=1.11.0
+
+# LifeOps
+sqlalchemy>=2.0.0
+pyyaml>=6.0
+
+# Logging and monitoring
+loguru>=0.7.0
+psutil>=5.9.0
+
+# Optional: For Sophia dashboard
+fastapi>=0.104.0
+uvicorn>=0.24.0
+
+# Optional: For integrations
+requests>=2.31.0
